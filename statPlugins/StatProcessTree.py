@@ -18,7 +18,7 @@ import logging
 
 
 class StatProcessTree:
-
+    """ Print the process fork tree in the strace file """
 
     def __init__(self):
         self._allPid = set()
@@ -41,7 +41,7 @@ class StatProcessTree:
             else:
                 self._childDict[pid] = [result["return"]]
 
-    def printProcessTree(self):
+    def printOutput(self):
         # remove child pid in _allPid, so it contains only head pid 
         for childPidList in self._childDict.values():
             for childPid in childPidList:

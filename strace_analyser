@@ -19,42 +19,83 @@ import getopt
 import re
 import traceback
 import logging
+import os
 from optparse import OptionParser
 from straceParserLib.StraceParser import StraceParser
-from straceParserLib.StatProcessTree import StatProcessTree
-from straceParserLib.StatFileIO import StatFileIO
+
+def importPlugin(pluginname, name):
+    """ Import a plugin 
+        similar to "from pluginname import name"
+    """
+    try:
+        plugin = __import__(pluginname, globals(), locals(), [name])
+    except ImportError:
+        return None
+    return getattr(plugin, name)
+
 
 def main():
     # parse command line options
-    optionParser = OptionParser(usage="usage: %prog [options] <filename>")
+    optionParser = OptionParser(usage="usage: %prog [options] [plugins] <filename>")
     optionParser.add_option("-t", "--withtime", action="store_true", dest="withtime", help="have time in strace (disable autodetect)")
     optionParser.add_option("-f", "--withfork", action="store_true", dest="withpid", help="have pid in strace (disable autodetect)")
     optionParser.add_option("-T", "--withtimespent", action="store_true", dest="withtimespent", help="have time spent in strace (disable autodetect)")
+    optionParser.add_option("-l", "--list-plugins", action="store_true", dest="listplugins", help="list all plugins")
+    optionParser.add_option("-e", "--enable-plugins", action="store", type="string", dest="enableplugins", help="enable these plugins only (e.g. plugin1,plugin2,plugin3)")
 
     (options, args) = optionParser.parse_args()
 
-    if len(args) < 1:
+    if not options.listplugins and len(args) < 1:
         print "Filename is missing, exit."
         optionParser.print_help()
         return 1
 
+    enablePluginList = []
+    if options.enableplugins:
+        enablePluginList = options.enableplugins.split(",")
+
+    # load plugins
+    pluginPath = "./statPlugins"
+    plugins = os.listdir(pluginPath)
+    plugins.sort()
+    statObjList = []
+
+    if options.listplugins:
+        print "=== Stat plugin list ==="
+    for plug in plugins:
+        plugbase = plug[:-3]
+        if not plug[-3:] == '.py' or plugbase == "__init__":
+            continue
+        
+        try:
+            pluginClass = importPlugin("statPlugins." + plugbase, plugbase)
+        except:
+            print "plugin %s does not install, skipping" % plug
+        if options.listplugins:
+            print plugbase, ":", pluginClass.__doc__
+        elif plugbase in enablePluginList:
+            statObjList.append(pluginClass())   # new an object from plugin class and put into list
+
+    if options.listplugins:     # just listed all plugin and then exit
+        exit(0)
+
+    if len(enablePluginList) == 0:
+        print "No plugin is specified. Exit."
+        exit(0)
+
     # init StraceParser
     straceParser = StraceParser()
 
-    # init stat plugins
-    statProcessTree = StatProcessTree()
-    statFileIO = StatFileIO()
-
     # register plugins to parser
-    statProcessTree.register(straceParser)
-    statFileIO.register(straceParser)
-
-    # Go ahead and parse the file
+    for obj in statObjList:
+        obj.register(straceParser)
+    
+    ## Go ahead and parse the file
     straceParser.startParse(args[0], options)
 
-    # print the result of the stat plugins
-    statProcessTree.printProcessTree()
-    statFileIO.printFileIO()
+    ## print the result of the stat plugins
+    for obj in statObjList:
+        obj.printOutput()
 
 if __name__ == "__main__":
     main()

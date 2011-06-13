@@ -163,8 +163,9 @@ class StraceParser:
                 if result["syscall"] in self._syscallCallbackHook:
                     for func in self._syscallCallbackHook[result["syscall"]]:
                         func(result)
-                for func in self._syscallCallbackHook["ALL"]:
-                    func(result)
+                if "ALL" in self._syscallCallbackHook:
+                    for func in self._syscallCallbackHook["ALL"]:
+                        func(result)
             
 
         # hook here for final:

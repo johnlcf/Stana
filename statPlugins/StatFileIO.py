@@ -16,7 +16,7 @@
 
 
 class StatFileIO:
-
+    """ Stat and print file IO of strace"""
 
     def __init__(self):
         self._fileStatList = {}
@@ -73,7 +73,7 @@ class StatFileIO:
                 self._fidStatList[fid][4] += int(result["return"])
             return
 
-    def printFileIO(self):
+    def printOutput(self):
         print "====== File IO summary ======"
 
         for fid in self._fidStatList:
