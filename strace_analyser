@@ -1,0 +1,60 @@
+#!/usr/bin/env python
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 2 of the License, or
+# (at your option) any later version.
+
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write to the Free Software
+# Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+
+
+import sys
+import getopt
+import re
+import traceback
+import logging
+from optparse import OptionParser
+from straceParserLib.StraceParser import StraceParser
+from straceParserLib.StatProcessTree import StatProcessTree
+from straceParserLib.StatFileIO import StatFileIO
+
+def main():
+    # parse command line options
+    optionParser = OptionParser(usage="usage: %prog [options] <filename>")
+    optionParser.add_option("-t", "--withtime", action="store_true", dest="withtime", help="have time in strace (disable autodetect)")
+    optionParser.add_option("-f", "--withfork", action="store_true", dest="withpid", help="have pid in strace (disable autodetect)")
+    optionParser.add_option("-T", "--withtimespent", action="store_true", dest="withtimespent", help="have time spent in strace (disable autodetect)")
+
+    (options, args) = optionParser.parse_args()
+
+    if len(args) < 1:
+        print "Filename is missing, exit."
+        optionParser.print_help()
+        return 1
+
+    # init StraceParser
+    straceParser = StraceParser()
+
+    # init stat plugins
+    statProcessTree = StatProcessTree()
+    statFileIO = StatFileIO()
+
+    # register plugins to parser
+    statProcessTree.register(straceParser)
+    statFileIO.register(straceParser)
+
+    # Go ahead and parse the file
+    straceParser.startParse(args[0], options)
+
+    # print the result of the stat plugins
+    statProcessTree.printProcessTree()
+    statFileIO.printFileIO()
+
+if __name__ == "__main__":
+    main()
