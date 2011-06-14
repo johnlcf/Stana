@@ -50,42 +50,29 @@ def main():
         optionParser.print_help()
         return 1
 
-    enablePluginList = []
-    if options.enableplugins:
-        enablePluginList = options.enableplugins.split(",")
-
-    # load plugins
-    pluginPath = "./statPlugins"
-    plugins = os.listdir(pluginPath)
-    plugins.sort()
-    statObjList = []
-
+    # List plugins
     if options.listplugins:
         print "=== Stat plugin list ==="
-    for plug in plugins:
-        plugbase = plug[:-3]
-        if not plug[-3:] == '.py' or plugbase == "__init__" or plugbase == "StatBase":
-            continue
-        
-        try:
-            pluginClass = importPlugin("statPlugins." + plugbase, plugbase)
-        except:
-            print "plugin %s does not install, skipping" % plug
-        if options.listplugins:
+        pluginPath = "./statPlugins"
+        plugins = os.listdir(pluginPath)
+        plugins.sort()
+
+        for plug in plugins:
+            plugbase = plug[:-3]
+            if not plug[-3:] == '.py' or plugbase == "__init__" or plugbase == "StatBase":
+                continue
+            
+            try:
+                pluginClass = importPlugin("statPlugins." + plugbase, plugbase)
+            except:
+                print "plugin %s does not install, skipping" % plug
             print plugbase, ":", pluginClass.__doc__
-        elif plugbase in enablePluginList:
-            statObjList.append(pluginClass())   # new an object from plugin class and put into list
 
-    if options.listplugins:     # just listed all plugin and then exit
-        exit(0)
-
-    if len(enablePluginList) == 0:
-        print "No plugin is specified. Exit."
+        # just listed all plugin and then exit
         exit(0)
 
     # init StraceParser
     straceParser = StraceParser()
-
     straceOptions = {}
     if options.withpid or options.withtime or options.withtimespent:
         straceOptions["havePid"] = options.withpid
@@ -97,11 +84,39 @@ def main():
             logging.warning("Auto detect line format failed. Suggest using -t,-f,-T to specify.")
             exit(1)
 
+    # Load enabled plugins
+    enablePluginList = []
+    if options.enableplugins:
+        enablePluginList = options.enableplugins.split(",")
+
+    statObjList = []
+    if len(enablePluginList) == 0:
+        print "No plugin is specified. Exit."
+        exit(0)
+    else:
+        for plug in enablePluginList:
+            try:
+                pluginClass = importPlugin("statPlugins." + plug, plug)
+            except:
+                print "plugin %s does not install, skipping" % plug
+
+            if not pluginClass:
+                print "plugin %s does not exist, skipping" % plug
+                continue
+
+            statObj = pluginClass()
+            if statObj.isOperational(straceOptions): # if it is operational under current strace option
+                statObjList.append(statObj)   # new an object from plugin class and put into list
+            else:
+                print "plugin %s is not operational under this strace options, skipping" % plug
+
+    if len(statObjList) == 0:
+        print "No plugin is loaded. Exit."
+        exit(1)
 
     # register plugins to parser
     for obj in statObjList:
-        if obj.isOperational(straceOptions):
-            obj.register(straceParser)
+        obj.register(straceParser)
     
     ## Go ahead and parse the file
     straceParser.startParse(args[0], straceOptions)

@@ -27,6 +27,9 @@ class StatFileIO(StatBase):
         for syscall in ["read", "write", "open", "close"]:
             straceParser.registerSyscallHook(syscall, self.statFileIO)
 
+    def isOperational(self, straceOptions):
+        return True
+
     def statFileIO(self, result):
         if result["syscall"] in ["read", "write", "open", "close"]:
             if result["return"] == -1:  # ignore failed syscalls
