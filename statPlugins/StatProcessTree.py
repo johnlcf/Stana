@@ -58,18 +58,20 @@ class StatProcessTree:
 
         print "====== Process Tree ======"
         for pid in self._allPid:
-            self._printTree(pid, self._childDict, 0)
+            self._printTree(pid, 0)
         print ""
 
 
-    def _printTree(self, pid, childDict, indent):
+    def _printTree(self, pid, indent):
         for i in xrange(0, indent):
             print "   ",
+
         if pid in self._childExecName:
             print "%s [%s]" % (pid, self._childExecName[pid])
         else:
             print "%s [unknown]" % pid
-        if pid in childDict:
-            for childPid in childDict[pid]:
-                self._printTree(childPid, childDict, indent+1)
+
+        if pid in self._childDict:
+            for childPid in self._childDict[pid]:
+                self._printTree(childPid, indent+1)
         return
