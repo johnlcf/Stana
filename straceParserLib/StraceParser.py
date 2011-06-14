@@ -61,8 +61,7 @@ class StraceParser:
             haveTime = options.withtime
             haveTimeSpent = options.withtimespent
         else:
-            f = open(filename)
-            lineFormat = self._detectLineFormat(f.readline())
+            lineFormat = self.autoDetectFormat(filename)
             if lineFormat:
                 havePid, haveTime, haveTimeSpent = lineFormat
             else:
@@ -70,9 +69,23 @@ class StraceParser:
                 havePid = 0
                 haveTime = 0
                 haveTimeSpent = 0
-            f.close()
         self._parse(filename, havePid, haveTime, haveTimeSpent)
 
+    def autoDetectFormat(self, filename):
+        f = open(filename)
+        failCount = 0
+        for line in f:
+            if failCount == 3:
+                f.close()
+                return None
+            if "unfinish" in line or "resume" in line:
+                continue
+            lineFormat = self._detectLineFormat(line)
+            if lineFormat:
+                f.close()
+                return lineFormat
+            else:
+                failCount += 1
 
     def _detectLineFormat(self, line):
         havePid = 0
