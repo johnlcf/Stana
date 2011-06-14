@@ -74,7 +74,7 @@ class StatFileIO:
             return
 
     def printOutput(self):
-        print "====== File IO summary ======"
+        print "====== File IO summary (csv) ======"
 
         for fid in self._fidStatList:
             #print self._fidStatList[fid]
@@ -88,8 +88,5 @@ class StatFileIO:
 
         print "filename, open/close count, read count, read bytes, write count, write bytes"
         for file in self._fileStatList:
-            print file,",",
-            for item in self._fileStatList[file]:
-                print item,",",
-            print
+            print "%s, %d, %d, %d, %d, %d" % tuple([file] + self._fileStatList[file])
 
