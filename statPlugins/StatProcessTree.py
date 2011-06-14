@@ -15,9 +15,10 @@
 
 
 import logging
+from StatBase import StatBase
 
 
-class StatProcessTree:
+class StatProcessTree(StatBase):
     """ Print the process fork tree in the strace file """
 
     def __init__(self):
@@ -25,6 +26,11 @@ class StatProcessTree:
         self._childDict = {}
         self._childExecName = {}
         return
+
+    def isOperational(self, straceOptions):
+        if not straceOptions["havePid"]:
+            return False
+        return True
 
     def register(self, straceParser):
         straceParser.registerSyscallHook("ALL", self.statProcessTree)

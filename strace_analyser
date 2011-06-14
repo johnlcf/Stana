@@ -64,7 +64,7 @@ def main():
         print "=== Stat plugin list ==="
     for plug in plugins:
         plugbase = plug[:-3]
-        if not plug[-3:] == '.py' or plugbase == "__init__":
+        if not plug[-3:] == '.py' or plugbase == "__init__" or plugbase == "StatBase":
             continue
         
         try:
@@ -86,12 +86,25 @@ def main():
     # init StraceParser
     straceParser = StraceParser()
 
+    straceOptions = {}
+    if options.withpid or options.withtime or options.withtimespent:
+        straceOptions["havePid"] = options.withpid
+        straceOptions["haveTime"] = options.withtime
+        straceOptions["haveTimeSpent"] = options.withtimespent
+    else:
+        straceOptions = straceParser.autoDetectFormat(args[0])
+        if not straceOptions:
+            logging.warning("Auto detect line format failed. Suggest using -t,-f,-T to specify.")
+            exit(1)
+
+
     # register plugins to parser
     for obj in statObjList:
-        obj.register(straceParser)
+        if obj.isOperational(straceOptions):
+            obj.register(straceParser)
     
     ## Go ahead and parse the file
-    straceParser.startParse(args[0], options)
+    straceParser.startParse(args[0], straceOptions)
 
     ## print the result of the stat plugins
     for obj in statObjList:

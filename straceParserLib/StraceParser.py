@@ -55,20 +55,11 @@ class StraceParser:
         else:
             self._syscallCallbackHook[fullSyscallName] = [func]
         
-    def startParse(self, filename, options):
-        if options.withpid or options.withtime or options.withtimespent:
-            havePid = options.withpid
-            haveTime = options.withtime
-            haveTimeSpent = options.withtimespent
-        else:
-            lineFormat = self.autoDetectFormat(filename)
-            if lineFormat:
-                havePid, haveTime, haveTimeSpent = lineFormat
-            else:
-                logging.warning("Auto detect line format failed. Suggest using -t,-f,-T to specify.")
-                havePid = 0
-                haveTime = 0
-                haveTimeSpent = 0
+    def startParse(self, filename, straceOptions):
+        havePid = straceOptions["havePid"]
+        haveTime = straceOptions["haveTime"]
+        haveTimeSpent = straceOptions["haveTimeSpent"]
+
         self._parse(filename, havePid, haveTime, haveTimeSpent)
 
     def autoDetectFormat(self, filename):
@@ -124,7 +115,12 @@ class StraceParser:
             else:
                 haveTimeSpent = 0
             
-        return (havePid, haveTime, haveTimeSpent)
+        straceOptions = {}    
+        straceOptions["havePid"] = havePid
+        straceOptions["haveTime"] = haveTime
+        straceOptions["haveTimeSpent"] = haveTimeSpent
+
+        return straceOptions
 
 
 
