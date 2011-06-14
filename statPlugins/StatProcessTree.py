@@ -23,6 +23,7 @@ class StatProcessTree:
     def __init__(self):
         self._allPid = set()
         self._childDict = {}
+        self._childExecName = {}
         return
 
     def register(self, straceParser):
@@ -36,10 +37,18 @@ class StatProcessTree:
         pid = result["pid"]
         self._allPid.add(pid)
         if result["syscall"] == "clone":
+            childPid = result["return"]
             if pid in self._childDict:
-                self._childDict[pid].append(result["return"])
+                self._childDict[pid].append(childPid)
             else:
-                self._childDict[pid] = [result["return"]]
+                self._childDict[pid] = [childPid]
+            # Copy the execuation name of parent process to child process.
+            # It will be overwritten by next execve call of child 
+            if pid in self._childExecName:
+                self._childExecName[childPid] = self._childExecName[pid]
+
+        if result["syscall"] == "execve":
+            self._childExecName[pid] = result["args"][0]
 
     def printOutput(self):
         # remove child pid in _allPid, so it contains only head pid 
@@ -56,7 +65,10 @@ class StatProcessTree:
     def _printTree(self, pid, childDict, indent):
         for i in xrange(0, indent):
             print "   ",
-        print pid
+        if pid in self._childExecName:
+            print "%s [%s]" % (pid, self._childExecName[pid])
+        else:
+            print "%s [unknown]" % pid
         if pid in childDict:
             for childPid in childDict[pid]:
                 self._printTree(childPid, childDict, indent+1)
