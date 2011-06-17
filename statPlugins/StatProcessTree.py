@@ -32,8 +32,8 @@ class StatProcessTree(StatBase):
             return False
         return True
 
-    def register(self, straceParser):
-        straceParser.registerSyscallHook("ALL", self.statProcessTree)
+    def getSyscallHooks(self):
+        return {"ALL": self.statProcessTree}
 
     def statProcessTree(self, result):
         if "pid" not in result:

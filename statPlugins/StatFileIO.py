@@ -23,9 +23,11 @@ class StatFileIO(StatBase):
         self._fidStatList = {}
         return
 
-    def register(self, straceParser):
+    def getSyscallHooks(self):
+        return_dict = {}
         for syscall in ["read", "write", "open", "close"]:
-            straceParser.registerSyscallHook(syscall, self.statFileIO)
+            return_dict[syscall] = self.statFileIO
+        return return_dict
 
     def isOperational(self, straceOptions):
         return True

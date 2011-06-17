@@ -116,7 +116,10 @@ def main():
 
     # register plugins to parser
     for obj in statObjList:
-        obj.register(straceParser)
+        hooks = obj.getSyscallHooks()
+        if hooks:
+            for syscall, func in hooks.iteritems():
+                straceParser.registerSyscallHook(syscall, func)
     
     ## Go ahead and parse the file
     straceParser.startParse(args[0], straceOptions)

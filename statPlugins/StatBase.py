@@ -30,9 +30,11 @@ class StatBase(object):
         """
         return True
 
-    def register(self, straceParser):
-        """ Register my callback function to straceParser by 
-            straceParser.registerSyscallHook 
+    def getSyscallHooks(self):
+        """ Return a dict with key = syscall name and value = hook function
+            E.g. return_dict["open"] = self.funcHandleOpenSyscall
+                 return_dict["close"] = self.funcHandleCloseSyscall
+                 return_dict["ALL"] = self.funcHandleALLSyscall
         """
         pass
 
