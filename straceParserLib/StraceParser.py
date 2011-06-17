@@ -36,24 +36,25 @@ class StraceParser:
 
 
     def __init__(self):
-        # _syscallCallbackHook
+        # _completeSyscallCallbackHook
         # the dict contains a list for each syscall that registered by someone who is
         # increased in the syscall is parsed.
         # E.g.
         #
-        # _syscallCallbackHook["open"] = [func1, func2]
-        # _syscallCallbackHook["close"] = [func1]
-        # _syscallCallbackHook["ALL"] = [func1]        'ALL' means it will be involved for all kind of syscalls
+        # _completeSyscallCallbackHook["open"] = [func1, func2]
+        # _completeSyscallCallbackHook["close"] = [func1]
+        # _completeSyscallCallbackHook["ALL"] = [func1]        'ALL' means it will be involved for all kind of syscalls
         #
         # 
-        self._syscallCallbackHook = {}
+        self._completeSyscallCallbackHook = {}
+        self._rawSyscallCallbackHook = {}
         return
 
     def registerSyscallHook(self, fullSyscallName, func):
-        if fullSyscallName in self._syscallCallbackHook:
-            self._syscallCallbackHook[fullSyscallName].append(func)
+        if fullSyscallName in self._completeSyscallCallbackHook:
+            self._completeSyscallCallbackHook[fullSyscallName].append(func)
         else:
-            self._syscallCallbackHook[fullSyscallName] = [func]
+            self._completeSyscallCallbackHook[fullSyscallName] = [func]
         
     def startParse(self, filename, straceOptions):
         havePid = straceOptions["havePid"]
@@ -139,15 +140,16 @@ class StraceParser:
             if line.find("restart_syscall") != -1:      # TODO: ignore this first
                 continue
 
+            unfinishedSyscall = False
+            reconstructSyscall = False
             if line.find("<unfinished ...>") != -1:     # store the unfinished line for reconstruct
+                unfinishedSyscall = True
                 if havePid:
                     pid = (line.partition(" "))[0]
                     unfinishedSyscallStack[pid] = line
                 else:
                     unfinishedSyscallStack[0] = line
-                continue
-
-            if line.find("resumed>") != -1:         # get back the unfinished line and reconstruct
+            elif line.find("resumed>") != -1:         # get back the unfinished line and reconstruct
                 if havePid:
                     pid = (line.partition(" "))[0]
                     if pid not in unfinishedSyscallStack:
@@ -158,27 +160,40 @@ class StraceParser:
                         continue                        # no <unfinished> line before, ignore
                     existLine = unfinishedSyscallStack[0] 
                 lineIndex = line.find("resumed>") + len("resumed>")
-                line = existLine.replace("<unfinished ...>", line[lineIndex:])
+                reconstructLine = existLine.replace("<unfinished ...>", line[lineIndex:])
+                reconstructSyscall = True
                 #print "debug reconstructed line:", line
 
 
-            # Parse the line. The line should be a completed system call
+            # Parse the line
             #print line
             result = self._parseLine(line, havePid, haveTime, haveTimeSpent)
 
-            # hook here for every completed syscalls:
+            # hook here for every (raw) syscalls
             if result:
-                #print result
-                if result["syscall"] in self._syscallCallbackHook:
-                    for func in self._syscallCallbackHook[result["syscall"]]:
+                if result["syscall"] in self._rawSyscallCallbackHook:
+                    for func in self._rawSyscallCallbackHook[result["syscall"]]:
                         func(result)
-                if "ALL" in self._syscallCallbackHook:
-                    for func in self._syscallCallbackHook["ALL"]:
+                if "ALL" in self._rawSyscallCallbackHook:
+                    for func in self._rawSyscallCallbackHook["ALL"]:
                         func(result)
-            
 
-        # hook here for final:
-        #printFileIO()
+            # determine if there is a completeSyscallResult
+            if unfinishedSyscall:
+                completeSyscallResult = None
+            elif reconstructSyscall:
+                completeSyscallResult = self._parseLine(reconstructLine, havePid, haveTime, haveTimeSpent)
+            else:   # normal completed syscall
+                completeSyscallResult = result
+
+            # hook here for every completed syscalls:
+            if completeSyscallResult:
+                if completeSyscallResult["syscall"] in self._completeSyscallCallbackHook:
+                    for func in self._completeSyscallCallbackHook[completeSyscallResult["syscall"]]:
+                        func(completeSyscallResult)
+                if "ALL" in self._completeSyscallCallbackHook:
+                    for func in self._completeSyscallCallbackHook["ALL"]:
+                        func(completeSyscallResult)
 
         return 
 
@@ -190,7 +205,7 @@ class StraceParser:
 #   startTime : start time of the call (if haveTime enabled)
 #   syscall :   system call function 
 #   args :      a list of arguments ([] if no options)
-#   return :    return value (number or '?' (e.g. exit syscall))
+#   return :    return value (+/- int or hex number string or '?' (e.g. exit syscall))
 #   timeSpent : time spent in syscall (if haveTimeSpent enable. But even so, it may not exist in some case (e.g. exit syscall) )
 #
 #   Return null if hit some error
@@ -217,18 +232,29 @@ class StraceParser:
                 ### Ignore signal line now
                 return 
             
-            ### assume no unfinished/resumed syscall, all are merged by caller
-            if remainLine.find("<unfinished ...>") != -1 or remainLine.find("resumed>") != -1:
-                return
+            # If it is unfinished/resumed syscall, still parse it but let the
+            # caller (_parse) determine what to do
+            unfinishedCall = False
+            if remainLine.find("<unfinished ...>") != -1:
+                unfinishedCall = True
+                m = re.match(r"([^(]+)\((.*) <unfinished ...>", remainLine)
+                result["syscall"] = m.group(1)
+                result["args"] = self._parseArgs(m.group(2).strip()) # probably only partal arguments
+            elif remainLine.find("resumed>") != -1:
+                m = re.match(r"\<\.\.\. ([^ ]+) resumed\> (.*)\)[ ]+=[ ]+([a-fx\d\-?]+)(.*)", remainLine)
+                result["syscall"] = m.group(1)
+                result["args"] = self._parseArgs(m.group(2).strip()) # probably only partal arguments
+                result["return"] = m.group(3)
+                remainLine = m.group(4)
+            else:
+                # normal system call
+                m = re.match(r"([^(]+)\((.*)\)[ ]+=[ ]+([a-fx\d\-?]+)(.*)", remainLine)
+                result["syscall"] = m.group(1)
+                result["args"] = self._parseArgs(m.group(2).strip())
+                result["return"] = m.group(3)
+                remainLine = m.group(4)
 
-            # normal system call
-            m = re.match(r"([^(]+)\((.*)\)[ ]+=[ ]+([\d\-?]+)(.*)", remainLine)
-            result["syscall"] = m.group(1)
-            result["args"] = self._parseArgs(m.group(2).strip())
-            result["return"] = m.group(3)
-            remainLine = m.group(4)
-
-            if haveTimeSpent:
+            if not unfinishedCall and haveTimeSpent:
                 m = re.search(r"<([\d.]*)>", remainLine)
                 if m:
                     result["timespent"] = m.group(1)
