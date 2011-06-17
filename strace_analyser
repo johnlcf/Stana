@@ -45,11 +45,6 @@ def main():
 
     (options, args) = optionParser.parse_args()
 
-    if not options.listplugins and len(args) < 1:
-        print "Filename is missing, exit."
-        optionParser.print_help()
-        return 1
-
     # List plugins
     if options.listplugins:
         print "=== Stat plugin list ==="
@@ -71,6 +66,13 @@ def main():
         # just listed all plugin and then exit
         exit(0)
 
+    # Not list plugin then we will need the strace file
+    if len(args) < 1:
+        print "Error: Filename is missing, exit."
+        optionParser.print_help()
+        return 1
+    straceFile = args[0]
+
     # init StraceParser
     straceParser = StraceParser()
     straceOptions = {}
@@ -79,7 +81,7 @@ def main():
         straceOptions["haveTime"] = options.withtime
         straceOptions["haveTimeSpent"] = options.withtimespent
     else:
-        straceOptions = straceParser.autoDetectFormat(args[0])
+        straceOptions = straceParser.autoDetectFormat(straceFile)
         if not straceOptions:
             logging.warning("Auto detect line format failed. Suggest using -t,-f,-T to specify.")
             exit(1)
@@ -122,7 +124,7 @@ def main():
                 straceParser.registerSyscallHook(syscall, func)
     
     ## Go ahead and parse the file
-    straceParser.startParse(args[0], straceOptions)
+    straceParser.startParse(straceFile, straceOptions)
 
     ## print the result of the stat plugins
     for obj in statObjList:
