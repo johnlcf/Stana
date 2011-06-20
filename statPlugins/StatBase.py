@@ -19,7 +19,8 @@ class StatBase(object):
     """ The base class of stat plugins """
 
     def isOperational(self, straceOptions):
-        """ Return true if this plugin works in the current strace options.
+        """ Should return true if this plugin works in the current strace 
+            options.
             The straceOptions should be a dict contains at least:
             straceOptions["havePid"] = 1/0
             straceOptions["haveTime"] = 1/0
@@ -31,15 +32,30 @@ class StatBase(object):
         return True
 
     def getSyscallHooks(self):
-        """ Return a dict with key = syscall name and value = hook function
+        """ Hook the processing function for each completed syscall. 
+
+            The uncomplete/resumed syscall will be merged before passing to the
+            hook function. And if it cannot merged then it will be ignored.
+            (If you want to get uncomplete/resumed saperately, use 
+             getRawSyscallHooks instead.)
+
+            Should return a dict with key = syscall name and value = hook function
             E.g. return_dict["open"] = self.funcHandleOpenSyscall
                  return_dict["close"] = self.funcHandleCloseSyscall
                  return_dict["ALL"] = self.funcHandleALLSyscall
         """
-        pass
+        return None
+
+    def getRawSyscallHooks(self):
+        """ Hook the processing function for each syscall (which may be 
+            unfinished/resumed)
+
+            Should return a dict similar to that of getSyscallHooks
+        """
+        return None
 
     def printOutput(self):
-        """ Print the output to console. Would be called after parsing is 
+        """ Should print the output to console. Would be called after parsing is 
             finished.
         """
         pass

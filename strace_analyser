@@ -60,7 +60,7 @@ def main():
             try:
                 pluginClass = importPlugin("statPlugins." + plugbase, plugbase)
             except:
-                print "plugin %s does not install, skipping" % plug
+                print "Warning: plugin %s does not install, skipping" % plug
             print plugbase, ":", pluginClass.__doc__
 
         # just listed all plugin and then exit
@@ -97,6 +97,7 @@ def main():
         exit(0)
     else:
         for plug in enablePluginList:
+            pluginClass = None
             try:
                 pluginClass = importPlugin("statPlugins." + plug, plug)
             except:
@@ -122,6 +123,10 @@ def main():
         if hooks:
             for syscall, func in hooks.iteritems():
                 straceParser.registerSyscallHook(syscall, func)
+        hooks = obj.getRawSyscallHooks()
+        if hooks:
+            for syscall, func in hooks.iteritems():
+                straceParser.registerRawSyscallHook(syscall, func)
     
     ## Go ahead and parse the file
     straceParser.startParse(straceFile, straceOptions)

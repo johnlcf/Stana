@@ -51,11 +51,18 @@ class StraceParser:
         return
 
     def registerSyscallHook(self, fullSyscallName, func):
-        if fullSyscallName in self._completeSyscallCallbackHook:
-            self._completeSyscallCallbackHook[fullSyscallName].append(func)
-        else:
-            self._completeSyscallCallbackHook[fullSyscallName] = [func]
+        self._registerHookInTable(fullSyscallName, self._completeSyscallCallbackHook, func)
         
+    def registerRawSyscallHook(self, fullSyscallName, func):
+        self._registerHookInTable(fullSyscallName, self._rawSyscallCallbackHook, func)
+
+    def _registerHookInTable(self, name, table, func):
+        if name in table:
+            table[name].append(func)
+        else:
+            table[name] = [func]
+        
+
     def startParse(self, filename, straceOptions):
         havePid = straceOptions["havePid"]
         haveTime = straceOptions["haveTime"]
