@@ -44,7 +44,7 @@ class StatLastSyscall(StatBase):
     def _reconstructStraceLine(self, result):
         # recontruct the strace line
         if self._straceOptions["haveTime"]:
-            syscallLine = result["startTime"] + " "
+            syscallLine = result["startTime"].strftime("%H:%M:%S.%f") + " "
         else:
             syscallLine = ""
         syscallLine += "{0} (".format(result["syscall"]) + ", ".join(result["args"])
@@ -57,17 +57,6 @@ class StatLastSyscall(StatBase):
             syscallLine = "{0:<39} = {1}".format(syscallLine, result["return"])
         return syscallLine
 
-    def _timeStrToDatetime(self, timeStr):
-        if ":" not in timeStr and "." in timeStr:
-            return datetime.utcfromtimestamp(float(timeStr))
-        if ":" in timeStr:
-            if "." in timeStr:
-                timeFormat = "%H:%M:%S.%f"
-            else:
-                timeFormat = "%H:%M:%S"
-            return datetime.strptime(timeStr, timeFormat)
-        return None
-            
 
     def funcHandleALLSyscall(self, result):
         if self._straceOptions["havePid"]:
@@ -77,7 +66,7 @@ class StatLastSyscall(StatBase):
         
         # store the last syscall time
         if self._straceOptions["haveTime"]:
-            syscallTime = self._timeStrToDatetime(result["startTime"])
+            syscallTime = result["startTime"]
             self._lastSyscallTime[pid] = syscallTime
             self._latestTime = syscallTime
 

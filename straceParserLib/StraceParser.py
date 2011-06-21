@@ -28,7 +28,7 @@ import re
 import traceback
 import logging
 from optparse import OptionParser
-
+from datetime import timedelta, time, datetime
 
 
 class StraceParser:
@@ -64,13 +64,17 @@ class StraceParser:
         
 
     def startParse(self, filename, straceOptions):
-        havePid = straceOptions["havePid"]
-        haveTime = straceOptions["haveTime"]
-        haveTimeSpent = straceOptions["haveTimeSpent"]
-
-        self._parse(filename, havePid, haveTime, haveTimeSpent)
+        self._parse(filename, straceOptions)
 
     def autoDetectFormat(self, filename):
+        """ autoDetectFormat - Detect the strace output line format, return a
+            dict with following:
+
+            straceOptions["havePid"] = True/False
+            straceOptions["haveTime"] = None/"t"/"tt"/"ttt"
+            straceOptions["haveTimeSpent"] True/False
+                
+        """
         f = open(filename)
         failCount = 0
         for line in f:
@@ -79,17 +83,28 @@ class StraceParser:
                 return None
             if "unfinish" in line or "resume" in line:
                 continue
-            lineFormat = self._detectLineFormat(line)
-            if lineFormat:
+            straceOptions = self._detectLineFormat(line)
+            if straceOptions:
                 f.close()
-                return lineFormat
+                return straceOptions
             else:
                 failCount += 1
 
+    def _detectTimeFormat(self, timeStr):
+        if ":" not in timeStr and "." in timeStr:
+            return "ttt"
+        if ":" in timeStr:
+            if "." in timeStr:
+                return "tt"
+            else:
+                return "t"
+        logging.debug("_detectTimeFormat: Failed: unable to detect time format.")
+        return None
+
     def _detectLineFormat(self, line):
-        havePid = 0
-        haveTime = 0
-        haveTimeSpent = 0
+        havePid = False
+        haveTime = None
+        haveTimeSpent = False
 
         remainLine = line
 
@@ -103,25 +118,26 @@ class StraceParser:
             return
 
         if pre != '':
-            if len(pre.strip().split()) > 2:
+            preList = pre.strip().split()
+            if len(preList) > 2:
                 logging.debug("_detectLineFormat: Failed: more the 2 parts in pre.")
                 return
-            if len(pre.strip().split()) == 2:
-                haveTime = 1
-                havePid = 1
+            if len(preList) == 2:
+                haveTime = self._detectTimeFormat(preList[1])
+                havePid = True
             else:
                 if ':' in pre or '.' in pre:
-                    havePid = 0
-                    haveTime = 1
+                    havePid = False
+                    haveTime = self._detectTimeFormat(preList[0])
                 else:
-                    havePid = 1
-                    haveTime = 0
+                    havePid = True
+                    haveTime = None
 
         if post != '':
             if re.search(r"(<[0-9.]+>)", line):
-                haveTimeSpent = 1
+                haveTimeSpent = True
             else:
-                haveTimeSpent = 0
+                haveTimeSpent = False
             
         straceOptions = {}    
         straceOptions["havePid"] = havePid
@@ -133,7 +149,7 @@ class StraceParser:
 
 
 
-    def _parse(self, filename, havePid=0, haveTime=0, haveTimeSpent=0):
+    def _parse(self, filename, straceOptions):
         syscallListByPid = {}
 
         unfinishedSyscallStack = {}
@@ -151,13 +167,13 @@ class StraceParser:
             reconstructSyscall = False
             if line.find("<unfinished ...>") != -1:     # store the unfinished line for reconstruct
                 unfinishedSyscall = True
-                if havePid:
+                if straceOptions["havePid"]:
                     pid = (line.partition(" "))[0]
                     unfinishedSyscallStack[pid] = line
                 else:
                     unfinishedSyscallStack[0] = line
             elif line.find("resumed>") != -1:         # get back the unfinished line and reconstruct
-                if havePid:
+                if straceOptions["havePid"]:
                     pid = (line.partition(" "))[0]
                     if pid not in unfinishedSyscallStack:
                         continue                        # no <unfinished> line before, ignore
@@ -174,7 +190,7 @@ class StraceParser:
 
             # Parse the line
             #print line
-            result = self._parseLine(line, havePid, haveTime, haveTimeSpent)
+            result = self._parseLine(line, straceOptions)
 
             # hook here for every (raw) syscalls
             if result:
@@ -189,7 +205,7 @@ class StraceParser:
             if unfinishedSyscall:
                 completeSyscallResult = None
             elif reconstructSyscall:
-                completeSyscallResult = self._parseLine(reconstructLine, havePid, haveTime, haveTimeSpent)
+                completeSyscallResult = self._parseLine(reconstructLine, straceOptions)
             else:   # normal completed syscall
                 completeSyscallResult = result
 
@@ -204,6 +220,30 @@ class StraceParser:
 
         return 
 
+
+    def _timeStrToTime(self, timeStr, timeFormat):
+        """ _timeStrToTime
+
+            timeFormat: "t"   = "%H:%M:%S"
+                        "tt"  = "%H:%M:%S.%f"
+                        "ttt" = "timestamp.%f"
+        """
+        if timeFormat == "ttt":
+            return datetime.utcfromtimestamp(float(timeStr))
+        else:
+            timeList = timeStr.split(":")
+            if timeFormat == "tt":
+                secondList = timeList[2].split(".")
+                t = time(int(timeList[0]), int(timeList[1]), int(secondList[0]), int(secondList[1]))
+            else:
+                t = time(int(timeList[0]), int(timeList[1]), int(timeList[2]))
+            # in order to use datetime object for calculation, pad the time with 1970-1-1
+            # TODO: should handle the day boundary case in _parse function
+            return datetime.combine(datetime(1970, 1, 1), t)
+
+    def _timeStrToDelta(self, timeStr):
+        return timedelta(seconds=float(timeStr))
+
 #
 #   _parseLine
 #
@@ -213,25 +253,25 @@ class StraceParser:
 #   syscall :   system call function 
 #   args :      a list of arguments ([] if no options)
 #   return :    return value (+/- int or hex number string or '?' (e.g. exit syscall)), not exist if it is an unfinished syscall
-#   timeSpent : time spent in syscall (if haveTimeSpent enable. But even so, it may not exist in some case (e.g. exit syscall) )
+#   timeSpent : time spent in syscall (if haveTimeSpent enable. But even so, it may not exist in some case (e.g. exit syscall) and None will be stored in this field)
 #   type :      Type of syscall ("completed", "unfinished", "resumed")
 #
 #   Return null if hit some error
 #
 #   (Not implemented) signalEvent : signal event (no syscall, args, return)
 #
-    def _parseLine(self, line, havePid=0, haveTime=0, haveTimeSpent=0):
+    def _parseLine(self, line, straceOptions):
         result = {}    
         remainLine = line
 
         try:
-            if havePid:
+            if straceOptions["havePid"]:
                 m = re.match(r"(\d+)[ ]+(.*)", remainLine)
                 result["pid"] = m.group(1)
                 remainLine = m.group(2)
-            if haveTime:
+            if straceOptions["haveTime"]:
                 m = re.match(r"([:.\d]+)[ ]+(.*)", remainLine)
-                result["startTime"] = m.group(1)
+                result["startTime"] = self._timeStrToTime(m.group(1), straceOptions["haveTime"])
                 remainLine = m.group(2)
 
             if remainLine.find("--- SIG") != -1:        # a signal line
@@ -263,16 +303,16 @@ class StraceParser:
                 result["return"] = m.group(3)
                 remainLine = m.group(4)
 
-            if result["type"] != "unfinished" and haveTimeSpent:
+            if result["type"] != "unfinished" and straceOptions["haveTimeSpent"]:
                 m = re.search(r"<([\d.]*)>", remainLine)
                 if m:
-                    result["timespent"] = m.group(1)
+                    result["timespent"] = _timeStrToDelta(m.group(1))
                 else:
-                    result["timespent"] = "unknown"
+                    result["timespent"] = None
 
         except AttributeError:
             logging.warning("_parseLine: Error parsing this line: " + line)
-            #print sys.exc_info()
+            print sys.exc_info()
             #exctype, value, t = sys.exc_info()
             #print traceback.print_exc()
             #print sys.exc_info()
