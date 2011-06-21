@@ -212,8 +212,9 @@ class StraceParser:
 #   startTime : start time of the call (if haveTime enabled)
 #   syscall :   system call function 
 #   args :      a list of arguments ([] if no options)
-#   return :    return value (+/- int or hex number string or '?' (e.g. exit syscall))
+#   return :    return value (+/- int or hex number string or '?' (e.g. exit syscall)), not exist if it is an unfinished syscall
 #   timeSpent : time spent in syscall (if haveTimeSpent enable. But even so, it may not exist in some case (e.g. exit syscall) )
+#   type :      Type of syscall ("completed", "unfinished", "resumed")
 #
 #   Return null if hit some error
 #
@@ -241,13 +242,13 @@ class StraceParser:
             
             # If it is unfinished/resumed syscall, still parse it but let the
             # caller (_parse) determine what to do
-            unfinishedCall = False
             if remainLine.find("<unfinished ...>") != -1:
-                unfinishedCall = True
+                result["type"] = "unfinished"
                 m = re.match(r"([^(]+)\((.*) <unfinished ...>", remainLine)
                 result["syscall"] = m.group(1)
                 result["args"] = self._parseArgs(m.group(2).strip()) # probably only partal arguments
             elif remainLine.find("resumed>") != -1:
+                result["type"] = "resumed"
                 m = re.match(r"\<\.\.\. ([^ ]+) resumed\> (.*)\)[ ]+=[ ]+([a-fx\d\-?]+)(.*)", remainLine)
                 result["syscall"] = m.group(1)
                 result["args"] = self._parseArgs(m.group(2).strip()) # probably only partal arguments
@@ -255,13 +256,14 @@ class StraceParser:
                 remainLine = m.group(4)
             else:
                 # normal system call
+                result["type"] = "completed"
                 m = re.match(r"([^(]+)\((.*)\)[ ]+=[ ]+([a-fx\d\-?]+)(.*)", remainLine)
                 result["syscall"] = m.group(1)
                 result["args"] = self._parseArgs(m.group(2).strip())
                 result["return"] = m.group(3)
                 remainLine = m.group(4)
 
-            if not unfinishedCall and haveTimeSpent:
+            if result["type"] != "unfinished" and haveTimeSpent:
                 m = re.search(r"<([\d.]*)>", remainLine)
                 if m:
                     result["timespent"] = m.group(1)
