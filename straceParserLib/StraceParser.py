@@ -48,6 +48,11 @@ class StraceParser:
         # 
         self._completeSyscallCallbackHook = {}
         self._rawSyscallCallbackHook = {}
+
+        # regex compiled for _parseLine
+        self._reCompleteSyscall = re.compile(r"([^(]+)\((.*)\)[ ]+=[ ]+([a-fx\d\-?]+)(.*)")
+        self._reUnfinishedSyscall = re.compile(r"([^(]+)\((.*) <unfinished ...>")
+        self._reResumedSyscall = re.compile(r"\<\.\.\. ([^ ]+) resumed\> (.*)\)[ ]+=[ ]+([a-fx\d\-?]+)(.*)")
         return
 
     def registerSyscallHook(self, fullSyscallName, func):
@@ -284,12 +289,12 @@ class StraceParser:
             # caller (_parse) determine what to do
             if remainLine.find("<unfinished ...>") != -1:
                 result["type"] = "unfinished"
-                m = re.match(r"([^(]+)\((.*) <unfinished ...>", remainLine)
+                m = self._reUnfinishedSyscall.match(remainLine)
                 result["syscall"] = m.group(1)
                 result["args"] = self._parseArgs(m.group(2).strip()) # probably only partal arguments
             elif remainLine.find("resumed>") != -1:
                 result["type"] = "resumed"
-                m = re.match(r"\<\.\.\. ([^ ]+) resumed\> (.*)\)[ ]+=[ ]+([a-fx\d\-?]+)(.*)", remainLine)
+                m = self._reResumedSyscall.match(remainLine)
                 result["syscall"] = m.group(1)
                 result["args"] = self._parseArgs(m.group(2).strip()) # probably only partal arguments
                 result["return"] = m.group(3)
@@ -297,7 +302,7 @@ class StraceParser:
             else:
                 # normal system call
                 result["type"] = "completed"
-                m = re.match(r"([^(]+)\((.*)\)[ ]+=[ ]+([a-fx\d\-?]+)(.*)", remainLine)
+                m = self._reCompleteSyscall.match(remainLine)
                 result["syscall"] = m.group(1)
                 result["args"] = self._parseArgs(m.group(2).strip())
                 result["return"] = m.group(3)
