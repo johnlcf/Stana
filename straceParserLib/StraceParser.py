@@ -165,19 +165,19 @@ class StraceParser:
 
         for line in f:
 
-            if line.find("restart_syscall") != -1:      # TODO: ignore this first
+            if "restart_syscall" in line:      # TODO: ignore this first
                 continue
 
             unfinishedSyscall = False
             reconstructSyscall = False
-            if line.find("<unfinished ...>") != -1:     # store the unfinished line for reconstruct
+            if "<unfinished ...>" in line:     # store the unfinished line for reconstruct
                 unfinishedSyscall = True
                 if straceOptions["havePid"]:
                     pid = (line.partition(" "))[0]
                     unfinishedSyscallStack[pid] = line
                 else:
                     unfinishedSyscallStack[0] = line
-            elif line.find("resumed>") != -1:         # get back the unfinished line and reconstruct
+            elif "resumed>" in line:         # get back the unfinished line and reconstruct
                 if straceOptions["havePid"]:
                     pid = (line.partition(" "))[0]
                     if pid not in unfinishedSyscallStack:
@@ -237,14 +237,13 @@ class StraceParser:
             return datetime.utcfromtimestamp(float(timeStr))
         else:
             timeList = timeStr.split(":")
-            if timeFormat == "tt":
-                secondList = timeList[2].split(".")
-                t = time(int(timeList[0]), int(timeList[1]), int(secondList[0]), int(secondList[1]))
-            else:
-                t = time(int(timeList[0]), int(timeList[1]), int(timeList[2]))
             # in order to use datetime object for calculation, pad the time with 1970-1-1
             # TODO: should handle the day boundary case in _parse function
-            return datetime.combine(datetime(1970, 1, 1), t)
+            if timeFormat == "tt":
+                secondList = timeList[2].split(".")
+                return datetime(1970, 1, 1, int(timeList[0]), int(timeList[1]), int(secondList[0]), int(secondList[1]))
+            else:
+                return datetime(1970, 1, 1, int(timeList[0]), int(timeList[1]), int(timeList[2]))
 
     def _timeStrToDelta(self, timeStr):
         return timedelta(seconds=float(timeStr))
@@ -271,15 +270,13 @@ class StraceParser:
 
         try:
             if straceOptions["havePid"]:
-                m = re.match(r"(\d+)[ ]+(.*)", remainLine)
-                result["pid"] = m.group(1)
-                remainLine = m.group(2)
-            if straceOptions["haveTime"]:
-                m = re.match(r"([:.\d]+)[ ]+(.*)", remainLine)
-                result["startTime"] = self._timeStrToTime(m.group(1), straceOptions["haveTime"])
-                remainLine = m.group(2)
+                result["pid"], remainLine = remainLine.split(None, 1)
 
-            if remainLine.find("--- SIG") != -1:        # a signal line
+            if straceOptions["haveTime"]:
+                timeStr, remainLine = remainLine.split(None, 1)
+                result["startTime"] = self._timeStrToTime(timeStr, straceOptions["haveTime"])
+
+            if "--- SIG" in remainLine:        # a signal line
                 #result["signalEvent"] = remainLine
                 #return result
                 ### Ignore signal line now
@@ -287,12 +284,12 @@ class StraceParser:
             
             # If it is unfinished/resumed syscall, still parse it but let the
             # caller (_parse) determine what to do
-            if remainLine.find("<unfinished ...>") != -1:
+            if "<unfinished ...>" in remainLine:
                 result["type"] = "unfinished"
                 m = self._reUnfinishedSyscall.match(remainLine)
                 result["syscall"] = m.group(1)
                 result["args"] = self._parseArgs(m.group(2).strip()) # probably only partal arguments
-            elif remainLine.find("resumed>") != -1:
+            elif "resumed>" in remainLine:
                 result["type"] = "resumed"
                 m = self._reResumedSyscall.match(remainLine)
                 result["syscall"] = m.group(1)
@@ -328,8 +325,20 @@ class StraceParser:
     def _parseArgs(self, argString):
         endSymbol = {'{':'}', '[':']', '"':'"'}
         resultArgs = []
+
+        # short-cut: if there is no {, [, " in the whole argString, use split
+        if all([sym not in argString for sym in endSymbol.keys()]):
+            # remove the comma and space at the end of argString, then split
+            # it by ', '
+            resultArgs = argString.rstrip(' ,').split(', ')
+            # remove all empty split
+            return filter(len, resultArgs) 
+
+        # otherwise, use a complex method to break the argument list, in order
+        # to ensure the comma inside {}, [], "" would not break things.
         currIndex = 0
-        while currIndex < len(argString):
+        lengthArgString = len(argString)
+        while currIndex < lengthArgString:
             if argString[currIndex] == ' ':     # ignore space
                 currIndex += 1
                 continue
@@ -337,7 +346,7 @@ class StraceParser:
             if argString[currIndex] in ['{', '[', '"']:
 
                 searchEndSymbolStartAt = currIndex+1    # init search from the currIndex+1
-                while searchEndSymbolStartAt < len(argString):
+                while searchEndSymbolStartAt < lengthArgString:
                     endSymbolIndex = argString.find(endSymbol[argString[currIndex]], searchEndSymbolStartAt)
                     if endSymbolIndex == -1:
                         logging.warning("_parseArgs: strange, can't find end symbol in this arg:" + argString)
@@ -352,7 +361,7 @@ class StraceParser:
 
             i = argString.find(',', searchCommaStartAt)
             if i == -1:
-                i = len(argString)      # the last arg
+                i = lengthArgString      # the last arg
             resultArgs.append(argString[currIndex:i]) # not include ','
             currIndex = i + 1           # point to the char after ','
 
