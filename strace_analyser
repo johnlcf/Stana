@@ -97,14 +97,9 @@ def main():
         exit(0)
     else:
         for plug in enablePluginList:
-            pluginClass = None
-            try:
-                pluginClass = importPlugin("statPlugins." + plug, plug)
-            except:
-                print "plugin %s does not install, skipping" % plug
-
+            pluginClass = importPlugin("statPlugins." + plug, plug)
             if not pluginClass:
-                print "plugin %s does not exist, skipping" % plug
+                print "Cannot install plugin %s, skipping" % plug
                 continue
 
             statObj = pluginClass()
