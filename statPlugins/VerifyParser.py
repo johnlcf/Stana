@@ -30,6 +30,9 @@ class VerifyParser(StatBase):
         else:
             output = output + " <unfinished ...>"
         print output
+        ## Print arg for check 
+        #for arg in result["args"]:
+        #    print "        %s" % arg
 
     def printOutput(self):
         pass
