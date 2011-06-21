@@ -308,9 +308,9 @@ class StraceParser:
             if result["type"] != "unfinished" and straceOptions["haveTimeSpent"]:
                 m = re.search(r"<([\d.]*)>", remainLine)
                 if m:
-                    result["timespent"] = _timeStrToDelta(m.group(1))
+                    result["timeSpent"] = self._timeStrToDelta(m.group(1))
                 else:
-                    result["timespent"] = None
+                    result["timeSpent"] = None
 
         except AttributeError:
             logging.warning("_parseLine: Error parsing this line: " + line)

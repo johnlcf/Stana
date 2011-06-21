@@ -35,6 +35,8 @@ class VerifyParser(StatBase):
             # pad some space before return value if it is too short
             # in order to match to original strace output
             output = "{0:<39} = {1}".format(output, result["return"])
+            if "timeSpent" in result and result["timeSpent"]:
+                output += " <%d.%06d>" % (result["timeSpent"].seconds, result["timeSpent"].microseconds)
 
         print output
         ## Print arg for check 
