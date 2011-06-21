@@ -24,11 +24,15 @@ class VerifyParser(StatBase):
 
     def funcHandleALLSyscall(self, result):
         output = "{0:<5} {1} {2}(".format(result["pid"], result["startTime"], result["syscall"])
-        output = output + ", ".join(result["args"])
-        if "return" in result:
-            output = output + ") = " + result["return"]
-        else:
+        output += ", ".join(result["args"])
+        if "return" not in result:
             output = output + " <unfinished ...>"
+        else:
+            output += ")"
+            # pad some space before return value if it is too short
+            # in order to match to original strace output
+            output = "{0:<39} = {1}".format(output, result["return"])
+
         print output
         ## Print arg for check 
         #for arg in result["args"]:
