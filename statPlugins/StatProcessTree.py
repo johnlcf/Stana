@@ -56,14 +56,21 @@ class StatProcessTree(StatBase):
         if result["syscall"] == "execve":
             self._childExecName[pid] = result["args"][0]
 
+    def getProcessChildern(self, pid):
+        return self._childDict[pid]
+
+    def getProcessExecName(self, pid):
+        return self._childExecName[pid]
+
     def printOutput(self):
-        # remove child pid in _allPid, so it contains only head pid 
+        # headPid = remove child pid in _allPid, so it contains only head pid 
+        headPid = self._allPid
         for childPidList in self._childDict.values():
             for childPid in childPidList:
-                self._allPid.remove(childPid)
+                headPid.remove(childPid)
 
         print "====== Process Tree ======"
-        for pid in self._allPid:
+        for pid in headPid:
             self._printTree(pid, 0)
         print ""
 
