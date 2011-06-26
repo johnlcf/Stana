@@ -15,6 +15,7 @@
 
 
 import logging
+from collections import defaultdict
 from StatBase import StatBase
 
 
@@ -23,7 +24,7 @@ class StatProcessTree(StatBase):
 
     def __init__(self):
         self._allPid = set()
-        self._childDict = {}
+        self._childDict = defaultdict(list)
         self._childExecName = {}
         return
 
@@ -44,10 +45,7 @@ class StatProcessTree(StatBase):
         self._allPid.add(pid)
         if result["syscall"] == "clone":
             childPid = result["return"]
-            if pid in self._childDict:
-                self._childDict[pid].append(childPid)
-            else:
-                self._childDict[pid] = [childPid]
+            self._childDict[pid].append(childPid)
             # Copy the execuation name of parent process to child process.
             # It will be overwritten by next execve call of child 
             if pid in self._childExecName:
@@ -84,7 +82,6 @@ class StatProcessTree(StatBase):
         else:
             print "%s [unknown]" % pid
 
-        if pid in self._childDict:
-            for childPid in self._childDict[pid]:
-                self._printTree(childPid, indent+1)
+        for childPid in self._childDict[pid]:
+            self._printTree(childPid, indent+1)
         return
