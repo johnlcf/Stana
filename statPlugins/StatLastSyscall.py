@@ -13,7 +13,7 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
 
-from collections import deque
+from collections import deque, defaultdict
 from datetime import timedelta, datetime
 
 from StatBase import StatBase
@@ -25,7 +25,7 @@ class StatLastSyscall(StatBase):
 
     def __init__(self):
         self._statProcessTree = StatProcessTree()
-        self._lastSyscallStore = {}
+        self._lastSyscallStore = defaultdict(deque)
         self._lastSyscallTime = {}
 
     def isOperational(self, straceOptions):
@@ -70,12 +70,9 @@ class StatLastSyscall(StatBase):
             self._lastSyscallTime[pid] = syscallTime
             self._latestTime = syscallTime
 
-        if pid in self._lastSyscallStore:
-            self._lastSyscallStore[pid].append(result)
-            if len(self._lastSyscallStore[pid]) > 3:    # store last 3 syscalls
-                self._lastSyscallStore[pid].popleft()
-        else:
-            self._lastSyscallStore[pid] = deque([result])
+        self._lastSyscallStore[pid].append(result)
+        if len(self._lastSyscallStore[pid]) > 3:    # store last 3 syscalls
+            self._lastSyscallStore[pid].popleft()
 
 
     def printOutput(self):
