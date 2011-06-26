@@ -29,6 +29,7 @@ import traceback
 import logging
 from optparse import OptionParser
 from datetime import timedelta, time, datetime
+from collections import defaultdict
 
 
 class StraceParser:
@@ -46,8 +47,8 @@ class StraceParser:
         # _completeSyscallCallbackHook["ALL"] = [func1]        'ALL' means it will be involved for all kind of syscalls
         #
         # 
-        self._completeSyscallCallbackHook = {}
-        self._rawSyscallCallbackHook = {}
+        self._completeSyscallCallbackHook = defaultdict(list)
+        self._rawSyscallCallbackHook = defaultdict(list)
 
         # regex compiled for _parseLine
         self._reCompleteSyscall = re.compile(r"([^(]+)\((.*)\)[ ]+=[ ]+([a-fx\d\-?]+)(.*)")
@@ -62,10 +63,7 @@ class StraceParser:
         self._registerHookInTable(fullSyscallName, self._rawSyscallCallbackHook, func)
 
     def _registerHookInTable(self, name, table, func):
-        if name in table:
-            table[name].append(func)
-        else:
-            table[name] = [func]
+        table[name].append(func)
         
 
     def startParse(self, filename, straceOptions):
