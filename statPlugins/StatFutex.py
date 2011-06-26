@@ -14,6 +14,7 @@
 # Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
 
 from datetime import timedelta, datetime
+from collections import defaultdict
 
 from StatBase import StatBase
 from StatProcessTree import StatProcessTree
@@ -26,7 +27,7 @@ class StatFutex(StatBase):
         self._statProcessTree = StatProcessTree()
         self._unfinishedResult = {}
         self._futexHolderPid = {}
-        self._futexWaiterPids = {}
+        self._futexWaiterPids = defaultdict(list)
 
     def isOperational(self, straceOptions):
         self._straceOptions = straceOptions
@@ -64,10 +65,7 @@ class StatFutex(StatBase):
         if "FUTEX_WAIT" in futexOp:
             if syscallType == "unfinished": # wait on a futex
                 # add myself in waiter list
-                if futexAddress in self._futexWaiterPids:
-                    self._futexWaiterPids[futexAddress].append(pid)
-                else:
-                    self._futexWaiterPids[futexAddress] = [pid]
+                self._futexWaiterPids[futexAddress].append(pid)
 
                 print "{0} pid:{1} wait        futex:{2}, current holder:{3}, waiting list:{4}".format(
                        timeStr, pid, futexAddress, 
@@ -85,7 +83,7 @@ class StatFutex(StatBase):
                     self._futexHolderPid[futexAddress] = pid    # I am the holder now
                     print "{0} pid:{1} hold        futex:{2}, waiting list:{3}".format(
                            timeStr, pid, futexAddress, 
-                           self._futexWaiterPids[futexAddress] if futexAddress in self._futexWaiterPids else "None")
+                           self._futexWaiterPids[futexAddress])
                 else:                # timeout 
                     print "{0} pid:{1} timeout     futex:{2}".format(timeStr, pid, futexAddress)
                     #TODO: many different cases in man page
@@ -94,7 +92,7 @@ class StatFutex(StatBase):
             self._futexHolderPid[futexAddress] = None
             print "{0} pid:{1} release     futex:{2}, waiting list:{3}".format(
                    timeStr, pid, futexAddress, 
-                   self._futexWaiterPids[futexAddress] if futexAddress in self._futexWaiterPids else None)
+                   self._futexWaiterPids[futexAddress])
 
 
     def printOutput(self):
@@ -104,4 +102,4 @@ class StatFutex(StatBase):
         for addr in futexAddressSet:
             print "{0},{1},{2}".format(addr, 
                    self._futexHolderPid[addr] if addr in self._futexHolderPid else "Unknown",
-                   self._futexWaiterPids[addr] if addr in self._futexWaiterPids else "None")
+                   self._futexWaiterPids[addr])
