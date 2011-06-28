@@ -20,7 +20,7 @@ import re
 import traceback
 import logging
 import os
-from optparse import OptionParser
+from optparse import OptionParser, OptionValueError
 from straceParserLib.StraceParser import StraceParser
 
 def importPlugin(pluginname, name):
@@ -33,13 +33,12 @@ def importPlugin(pluginname, name):
         return None
     return getattr(plugin, name)
 
-
 def main():
     # parse command line options
     optionParser = OptionParser(usage="usage: %prog [options] [plugins] <filename>")
-    optionParser.add_option("-t", "--withtime", action="store_true", dest="withtime", help="have time in strace (disable autodetect)")
-    optionParser.add_option("-f", "--withfork", action="store_true", dest="withpid", help="have pid in strace (disable autodetect)")
-    optionParser.add_option("-T", "--withtimespent", action="store_true", dest="withtimespent", help="have time spent in strace (disable autodetect)")
+    optionParser.add_option("-t", action="count", dest="withtime", help="have time in strace (disable autodetect, use -T, -f, -t, -tt or -ttt to match with your strace output)")
+    optionParser.add_option("-f", action="store_true", dest="withpid", help="have pid in strace (disable autodetect)")
+    optionParser.add_option("-T", action="store_true", dest="withtimespent", help="have time spent in strace (disable autodetect)")
     optionParser.add_option("-l", "--list-plugins", action="store_true", dest="listplugins", help="list all plugins")
     optionParser.add_option("-e", "--enable-plugins", action="store", type="string", dest="enableplugins", help="enable these plugins only (e.g. plugin1,plugin2,plugin3)")
 
@@ -78,7 +77,9 @@ def main():
     straceOptions = {}
     if options.withpid or options.withtime or options.withtimespent:
         straceOptions["havePid"] = options.withpid
-        straceOptions["haveTime"] = options.withtime
+        # options.withtime contain the number of -t (e.g. -t = 1, -tt = 2. -ttt = 3)
+        # convert it back to t, tt, or ttt
+        straceOptions["haveTime"] = "t" * options.withtime  
         straceOptions["haveTimeSpent"] = options.withtimespent
     else:
         straceOptions = straceParser.autoDetectFormat(straceFile)
