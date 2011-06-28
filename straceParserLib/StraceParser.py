@@ -14,14 +14,6 @@
 # Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
 
 
-"""
-StraceParser
-
-This is the strace parser. It parses each system call lines into a dict, and 
-then call the registered stat modules to process. 
-
-The defination of dict: please refer to _parseLine
-"""
 import sys
 import getopt
 import re
@@ -33,7 +25,14 @@ from collections import defaultdict
 
 
 class StraceParser:
-    """StraceParser     """
+    """
+    StraceParser
+
+    This is the strace parser. It parses each system call lines into a dict, and 
+    then call the registered stat modules to process. 
+
+    The defination of dict: please refer to _parseLine
+    """
 
 
     def __init__(self):
