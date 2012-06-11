@@ -47,7 +47,7 @@ class StatLastSyscall(StatBase):
             syscallLine = result["startTime"].strftime("%H:%M:%S.%f") + " "
         else:
             syscallLine = ""
-        syscallLine += "{0} (".format(result["syscall"]) + ", ".join(result["args"])
+        syscallLine += "{0} (".format(result["syscall"]) + ", ".join([str(a) for a in result["args"]])
         if result["type"] == "unfinished":
             syscallLine += " <unfinished ...>"
         else:

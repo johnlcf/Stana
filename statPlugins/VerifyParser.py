@@ -27,7 +27,7 @@ class VerifyParser(StatBase):
             output = "{0:<5} {1} <... {2} resumed> ".format(result["pid"], result["startTime"].time(), result["syscall"])
         else:
             output = "{0:<5} {1} {2}(".format(result["pid"], result["startTime"].time(), result["syscall"])
-        output += ", ".join(result["args"])
+        output += ", ".join([str(a) for a in result["args"]])
         if result["type"] == "unfinished":
             output = output + " <unfinished ...>"
         else:

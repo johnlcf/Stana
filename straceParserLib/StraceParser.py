@@ -319,6 +319,140 @@ class StraceParser:
             
         return result
 
+    def _countPrecedingBackslashes(self, s, pos):
+        initialPos = pos
+        while pos > 0 and s[pos-1] == '\\':
+            pos-=1
+        return (initialPos-pos)
+
+    def _parseStringArg(self, argString):
+        """
+        Parses to the end of a string parameter.
+
+        >>> parser = StraceParser()
+        >>> parser._parseStringArg('"abc"')
+        ('"abc"', '')
+        >>> parser._parseStringArg('"abc", 42') # the part behind the initial string will be returned as "remainder":
+        ('"abc"', ', 42')
+        >>> parser._parseStringArg('"", "42"')
+        ('""', ', "42"')
+        >>> parser._parseStringArg('"abc\"hello\"xyz", 42')
+        ('"abc"', 'hello"xyz", 42')
+        >>> parser._parseStringArg(r'"abc\x5c\x5c\x5c"xyz", 42') # multiple backslashes before terminating quote
+        ('"abc\x5c\x5c\x5c\x5c\x5c\x5c"xyz"', ', 42')
+        >>> print parser._parseStringArg(r'"\x5c\x5c\x5c"", 42')
+        ('"\x5c\x5c\x5c\x5c\x5c\x5c""', ', 42')
+        >>> print parser._parseStringArg(r'"\x5c\x5c", 42')
+        ('"\x5c\x5c\x5c\x5c"', ', 42')
+        >>> parser._parseStringArg('"abc') # bad parameter
+        ('"', 'abc')
+        """
+        searchEndSymbolStartAt = 1
+        while True:
+            endSymbolIndex = argString.find('"', searchEndSymbolStartAt)
+
+            if endSymbolIndex == -1:
+                logging.warning("_parseStringArg: strange, can't find end symbol in this arg:" + argString)
+                endSymbolIndex = 0
+                break
+
+            numPrecedingBackslashes = self._countPrecedingBackslashes(argString, endSymbolIndex)
+            if numPrecedingBackslashes % 2 == 1:
+                # if preceded by an odd number of backslashes, the quote character is escaped
+                searchEndSymbolStartAt = endSymbolIndex + 1
+            else:
+                break
+        return ( argString[0:endSymbolIndex+1], argString[endSymbolIndex+1:] )
+
+    def _parseBlockArg(self, argString, parseBlock=False):
+        """
+        Parses a list of arguments, recursing into blocks.
+
+        >>> parser = StraceParser()
+        >>> parser._parseBlockArg('[42]', True)
+        (['42'], '')
+        >>> parser._parseBlockArg('[]', True)
+        ([''], '')
+        >>> parser._parseBlockArg('[], []', True)
+        ([''], ', []')
+        >>> parser._parseBlockArg('[42, 5, "abc"]', True)
+        (['42', '5', '"abc"'], '')
+        >>> parser._parseBlockArg('[42, {5, 6}, "abc"], "xyz"', True)
+        (['42', ['5', '6'], '"abc"'], ', "xyz"')
+        >>> parser._parseBlockArg('{42, [5, "abc"}', True) # error case
+        ('{42, [5, "abc"}', '')
+
+        >>> parser._parseBlockArg('42')
+        (['42'], '')
+        >>> parser._parseBlockArg('5, 42')
+        (['5', '42'], '')
+        >>> parser._parseBlockArg('[[["[[]]"]]]')
+        ([[[['"[[]]"']]]], '')
+        """
+        endSymbols = {'{':'}', '[':']', '"':'"'}
+        resultArgs = []
+
+        currIndex = 0
+        if parseBlock:
+            endChar = endSymbols[argString[0]]
+            currIndex+=1
+
+        lengthArgString = len(argString)
+        remainderString = argString
+        while currIndex < lengthArgString:
+            if argString[currIndex] == ' ': # ignore space
+                currIndex += 1
+                continue
+
+            content = None
+            if argString[currIndex] == '"':
+                # inner string; parse recursively till end of string
+                (content, remainderString) = self._parseStringArg(argString[currIndex:])
+            elif argString[currIndex] in ['{', '[']:
+                # inner block; parse recursively till end of this block
+                (content, remainderString) = self._parseBlockArg(argString[currIndex:], True)
+            else:
+                # normal parameter; find next comma
+                remainderString = argString[currIndex:]
+
+            nextCommaPos = remainderString.find(', ')
+            if parseBlock:
+                nextTerminatorPos = remainderString.find(endChar)
+                if nextTerminatorPos == -1:
+                    logging.warning("_parseBlockArg: strange, can't find end symbol '%s' in this arg: '%s'" % (endChar, argString))
+                    return (argString, "")
+            else:
+                nextTerminatorPos = lengthArgString
+
+            finished = False
+            if nextCommaPos == -1 or nextTerminatorPos < nextCommaPos:
+                # we've parsed last parameter in block
+                contentString = remainderString[:nextTerminatorPos]
+                remainderString = remainderString[nextTerminatorPos+1:]
+                finished = True
+            elif nextTerminatorPos > nextCommaPos:
+                # there is another parameter in this block:
+                contentString = remainderString[:nextCommaPos]
+                remainderString = remainderString[nextCommaPos+1:]
+            else:
+                assert False, "internal error (this case shouldn't be hit)"
+
+            if content is None:
+                # block parser didn't return any value, or current parameter is a non-block value;
+                # so use entire raw string as "content"
+                content = contentString
+
+            resultArgs.append(content)
+
+            if finished:
+                break
+
+            assert(remainderString)
+            currIndex = len(argString) - len(remainderString)
+            currIndex+=1
+
+        return (resultArgs, remainderString)
+
     def _parseArgs(self, argString):
         """
         Parses an argument string and returns a (possibly nested) list of arguments.
@@ -330,13 +464,11 @@ class StraceParser:
         ['5', '42']
 
         >>> parser._parseArgs('5, FIONREAD, [0]')
-        ['5', 'FIONREAD', '[0]']
+        ['5', 'FIONREAD', ['0']]
         >>> parser._parseArgs('4, [{"ab, c]def", 9}, {"", 0}], 2')
-        ['4', '[{"ab, c]def", 9}, {"", 0}]', '2']
+        ['4', [['"ab, c]def"', '9'], ['""', '0']], '2']
         """
         endSymbol = {'{':'}', '[':']', '"':'"'}
-        resultArgs = []
-
         # short-cut: if there is no {, [, " in the whole argString, use split
         if all([sym not in argString for sym in endSymbol.keys()]):
             # remove the comma and space at the end of argString, then split
@@ -347,38 +479,9 @@ class StraceParser:
 
         # otherwise, use a complex method to break the argument list, in order
         # to ensure the comma inside {}, [], "" would not break things.
-        currIndex = 0
-        lengthArgString = len(argString)
-        while currIndex < lengthArgString:
-            if argString[currIndex] == ' ':     # ignore space
-                currIndex += 1
-                continue
-            
-            if argString[currIndex] in ['{', '[', '"']:
-
-                searchEndSymbolStartAt = currIndex+1    # init search from the currIndex+1
-                while searchEndSymbolStartAt < lengthArgString:
-                    endSymbolIndex = argString.find(endSymbol[argString[currIndex]], searchEndSymbolStartAt)
-                    if endSymbolIndex == -1:
-                        logging.warning("_parseArgs: strange, can't find end symbol in this arg:" + argString)
-                        return []
-                    if argString[endSymbolIndex-1] == '\\' and (endSymbolIndex-2 >= 0 and argString[endSymbolIndex-2] != '\\'):  # escape char which are not escaped
-                        searchEndSymbolStartAt = endSymbolIndex + 1
-                    else:
-                        break
-                searchCommaStartAt = endSymbolIndex + 1
-            else:    # normal, search comma after currIndex
-                searchCommaStartAt = currIndex + 1
-
-            i = argString.find(',', searchCommaStartAt)
-            if i == -1:
-                i = lengthArgString      # the last arg
-            resultArgs.append(argString[currIndex:i]) # not include ','
-            currIndex = i + 1           # point to the char after ','
-
-        #print argString
-        #print resultArgs
-        return resultArgs
+        (content, remainderString) = self._parseBlockArg(argString, False)
+        assert not(remainderString), "remainder left after parsing: '%s'" % remainderString
+        return content
 
 
 if __name__ == '__main__':
