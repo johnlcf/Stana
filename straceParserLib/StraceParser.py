@@ -320,6 +320,20 @@ class StraceParser:
         return result
 
     def _parseArgs(self, argString):
+        """
+        Parses an argument string and returns a (possibly nested) list of arguments.
+
+        >>> parser = StraceParser()
+        >>> parser._parseArgs('42')
+        ['42']
+        >>> parser._parseArgs('5, 42')
+        ['5', '42']
+
+        >>> parser._parseArgs('5, FIONREAD, [0]')
+        ['5', 'FIONREAD', '[0]']
+        >>> parser._parseArgs('4, [{"ab, c]def", 9}, {"", 0}], 2')
+        ['4', '[{"ab, c]def", 9}, {"", 0}]', '2']
+        """
         endSymbol = {'{':'}', '[':']', '"':'"'}
         resultArgs = []
 
@@ -365,4 +379,10 @@ class StraceParser:
         #print argString
         #print resultArgs
         return resultArgs
+
+
+if __name__ == '__main__':
+    print "running some tests..."
+    import doctest
+    doctest.testmod()
 
