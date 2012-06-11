@@ -329,6 +329,11 @@ class StraceParser:
         """
         Parses to the end of a string parameter.
 
+        argString must begin with a quote character. _parseStringArg() parses
+        to the corresponding terminating quote character.
+        Returns the parsed string (including quotes) and the unparsed
+        remainder of argString.
+
         >>> parser = StraceParser()
         >>> parser._parseStringArg('"abc"')
         ('"abc"', '')
@@ -367,6 +372,12 @@ class StraceParser:
     def _parseBlockArg(self, argString, parseBlock=False):
         """
         Parses a list of arguments, recursing into blocks.
+
+        argString must be a string of comma-separated arguments.
+        If parseBlock is True, argString must start with [ or {,
+        and _parseBlockArg() will only parse to the end of the matching
+        bracket.
+        Returns the parsed arguments and the unparsed remainder of argString.
 
         >>> parser = StraceParser()
         >>> parser._parseBlockArg('[42]', True)
