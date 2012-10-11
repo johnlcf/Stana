@@ -47,7 +47,7 @@ def main():
     # List plugins
     if options.listplugins:
         print "=== Stat plugin list ==="
-        pluginPath = "./statPlugins"
+        pluginPath = os.path.join(sys.path[0], "statPlugins")
         plugins = os.listdir(pluginPath)
         plugins.sort()
 
