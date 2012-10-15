@@ -142,9 +142,12 @@ class StatStreams(StatBase):
 
     def closeStream(self, syscall, retcode, args):
         stream_nr = int(args[0])
-        self._closed_streams.append('\n'.join(self._open_streams[stream_nr] + \
+        if stream_nr in self._open_streams:
+            self._closed_streams.append('\n'.join(self._open_streams[stream_nr] + \
                             ['closed(%s)\n' % stream_nr]))
-        del self._open_streams[stream_nr]
+            del self._open_streams[stream_nr]
+        else:
+            logging.error("Missed openning %s", stream_nr)
 
     def statStreams(self, result):
         logging.debug(result)
