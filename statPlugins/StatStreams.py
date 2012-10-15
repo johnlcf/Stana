@@ -97,7 +97,7 @@ class StatStreams(StatBase):
                 stream[-1] += read_str 
             else:
                 stream.append(StatStreams.IN_MARKER)
-                stream.append(read_str + '*')
+                stream.append(read_str)
         else:
             logging.error("Missed openning %s", stream_nr)
             

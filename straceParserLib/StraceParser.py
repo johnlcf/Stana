@@ -77,7 +77,12 @@ class StraceParser:
             straceOptions["haveTimeSpent"] True/False
                 
         """
-        f = open(filename)
+        #don't check if it comes from streams
+        if filename == '-':
+            return 
+        else:
+            f = open(filename)
+
         failCount = 0
         for line in f:
             if failCount == 3:
@@ -155,7 +160,10 @@ class StraceParser:
         syscallListByPid = {}
 
         unfinishedSyscallStack = {}
-        f = open(filename, "r")
+        if filename == '-':
+            f = sys.stdin
+        else:
+            f = open(filename, "r")
         if not f:
             logging.error("Cannot open file: " + filename)
             return
