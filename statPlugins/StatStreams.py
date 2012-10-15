@@ -27,7 +27,13 @@ class StatStreams(StatBase):
     """ Stat and follow streams in strace"""
     SYSCALLS = "open socket connect read write close".split()
     RE_PAT = dict(
-        ip_address=re.compile('.*[^0-9]((?:[0-9]{1,3}\.){3}[0-9]{1,3})[^0-9].*'))
+        ip_address=re.compile('.*[^0-9]((?:[0-9]{1,3}\.){3}[0-9]{1,3})[^0-9].*'),
+        #set of printable unicode characters 
+        #(no control charaters and \t \n \r (:= 9,10,13)
+        no_str=re.compile('[%s]' % re.escape(''.join(map(unichr, range(0,8) + [11, 12] + range (14,32) + range(127,160))))),
+        no_ascii=re.compile('[^%s]' % re.escape(''.join(map(chr, range(33,126))))))
+    OUT_MARKER = '>>>>'
+    IN_MARKER = '<<<<'
 
     def __init__(self):
         #key = OF number
@@ -75,8 +81,6 @@ class StatStreams(StatBase):
         stream_nr = int(args[0])
         if stream_nr in self._open_streams:
             stream = self._open_streams[stream_nr]
-            print args[1][0]
-            print args[1]
             if args[1][0].startswith('sa_family=AF_INET'):
                 stream.append('Connected to %s' % StatStreams.RE_PAT['ip_address'].match(args[1][2]).group(1))
         else:
@@ -87,7 +91,13 @@ class StatStreams(StatBase):
         stream_nr = int(args[0])
         if stream_nr in self._open_streams:
             stream = self._open_streams[stream_nr]
-            stream.append('<<' + ', '.join(args[1:]))
+            read_str =  self.parseString(syscall, retcode, args[1])
+            if len(stream) > 1 and stream[-2].startswith(StatStreams.IN_MARKER):
+                #merge with last one                                                       
+                stream[-1] += read_str 
+            else:
+                stream.append(StatStreams.IN_MARKER)
+                stream.append(read_str + '*')
         else:
             logging.error("Missed openning %s", stream_nr)
             
@@ -96,14 +106,44 @@ class StatStreams(StatBase):
         stream_nr = int(args[0])
         if stream_nr in self._open_streams:
             stream = self._open_streams[stream_nr]
-            stream.append('>>' + ', '.join(args[1:]))
+            write_str =  self.parseString(syscall, retcode, args[1])
+            if len(stream) > 1 and stream[-2].startswith(StatStreams.OUT_MARKER):
+                #merge with last one
+                stream[-1] += write_str 
+            else:
+                #new communication direction, start new block
+                stream.append(StatStreams.OUT_MARKER)
+                stream.append(write_str)  
         else:
             logging.error("Missed openning %s", stream_nr)
 
+    def parseString(self, syscall, retcode, str_to_parse):
+        #strip quotes and escape sequences
+        str_arg = str_to_parse[1:-1].decode("string_escape")
+        if StatStreams.RE_PAT['no_str'].search(str_arg):
+            #handle a non printable string
+            str_arg = self.prettyPrintHex(str_arg)
+        if retcode > len(str_arg):
+            #we don't have everything. Mark missing
+            str_arg += '...\n'
+        return str_arg
+        
+    def prettyPrintHex(self, src, length=16):
+        src = StatStreams.RE_PAT['no_ascii'].sub('.', src)
+        offset=0
+        result=''
+        while src:
+           s,src = src[:length],src[length:]
+           hexa = ' '.join(["%02X"%ord(x) for x in s])
+           result += "%04X   %-*s   %s\n" % (offset, length * 3, hexa, s)
+           offset += length
+        return result
+
+
     def closeStream(self, syscall, retcode, args):
         stream_nr = int(args[0])
-        self._closed_streams.append('\n'.join(self._open_streams[stream_nr]) + \
-                            ('\nclosed(%s)\n' % stream_nr))
+        self._closed_streams.append('\n'.join(self._open_streams[stream_nr] + \
+                            ['closed(%s)\n' % stream_nr]))
         del self._open_streams[stream_nr]
 
     def statStreams(self, result):
