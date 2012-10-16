@@ -84,7 +84,7 @@ def main():
     elif straceFile == '-':
         #we can't infer anything if working on-line
         straceOptions = dict(havePid=False, haveTime=False, haveTimeSpent=False)
-        print >> sys.stderr, "WARN: Assuming no pid not time info is strace output."
+        print >> sys.stderr, "WARN: Assuming no pid or time info in strace output."
     else:
         straceOptions = straceParser.autoDetectFormat(straceFile)
         if not straceOptions:

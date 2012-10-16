@@ -48,8 +48,9 @@ class StatStreams(StatBase):
         self._closed_streams = []
 
         #some defaults
-        self.show_text = True
-        self.show_binary = True
+        self.show_text = True       #display streams contents
+        self.show_binary = True     #display binary streams
+        self.show_online = False    #display streams as soon as they are closed
         
         #define stdin, stdout and stderr
         names = ['STDIN', 'STDOUT', 'STDERR']
@@ -169,7 +170,14 @@ class StatStreams(StatBase):
             stream = self._open_streams[stream_nr]
             closing_strs = ['closed(%s) - in:%s - out: %s\n' % 
                 (stream_nr, stream._metadata['in'], stream._metadata['out'])]
-            self._closed_streams.append('\n'.join(stream +  closing_strs))
+
+            if self.show_online:
+                #just show the report and continue
+                print '\n'.join(stream +  closing_strs)
+            else:
+                #store the report for later
+                self._closed_streams.append('\n'.join(stream +  closing_strs))
+
             del self._open_streams[stream_nr]
         else:
             logging.error("Missed openning %s", stream_nr)
@@ -189,10 +197,14 @@ class StatStreams(StatBase):
             
     def printOutput(self):
         #close all open streams
+        if self.show_online:
+            print "====== Finalized Streams  ======"
         for stream in self._open_streams.keys():
             self.closeStream(None, None, [stream])
 
-        print "====== File Streams ======"
-        print '\n'.join(self._closed_streams)
+
+        if not self.show_online:
+            print "====== File Streams ======"
+            print '\n'.join(self._closed_streams)
 
 
