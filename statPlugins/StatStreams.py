@@ -19,19 +19,25 @@ import re
 from StatBase import StatBase
 
 class streamList(list):
+    """A list object extended to a _metadata dictionary"""
     def __init__(self,*args,**kwargs):
         self._metadata = {}
         list.__init__(self, args, **kwargs)
 
 class StatStreams(StatBase):
     """ Stat and follow streams in strace"""
+    #Syscalls this object will be registered with
     SYSCALLS = "open socket connect read write close".split()
+
+    #some regexp for extracting information out of the strace log lines
     RE_PAT = dict(
         ip_address=re.compile('.*[^0-9]((?:[0-9]{1,3}\.){3}[0-9]{1,3})[^0-9].*'),
         #set of printable unicode characters 
         #(no control charaters and \t \n \r (:= 9,10,13)
         no_str=re.compile('[%s]' % re.escape(''.join(map(unichr, range(0,8) + [11, 12] + range (14,32) + range(127,160))))),
         no_ascii=re.compile('[^%s]' % re.escape(''.join(map(chr, range(33,126))))))
+
+    #markers for displaying the output
     OUT_MARKER = '>>>>'
     IN_MARKER = '<<<<'
 
@@ -40,14 +46,18 @@ class StatStreams(StatBase):
         self._open_streams = {}
         #store the finished streams
         self._closed_streams = []
+
+        #some defaults
+        self.show_text = True
+        self.show_binary = True
         
         #define stdin, stdout and stderr
-        self._open_streams[0] = streamList('STDIN')
-        self._open_streams[0]._metadata['type'] = 'STDIN'
-        self._open_streams[1] = streamList('STDOUT')
-        self._open_streams[1]._metadata['type'] = 'STDOUT'
-        self._open_streams[2] = streamList('STDERR')
-        self._open_streams[2]._metadata['type'] = 'STDERR'
+        names = ['STDIN', 'STDOUT', 'STDERR']
+        for num in range(3):
+            self._open_streams[num] = streamList(names[num])
+            self._open_streams[num]._metadata = dict(type=names[num],  out=0)
+            self._open_streams[num]._metadata['in'] = 0
+
 
     def getSyscallHooks(self):
         return_dict = {}
@@ -75,6 +85,8 @@ class StatStreams(StatBase):
         sl = streamList("%s(%s) %s" % (st_type , stream_nr, ', '.join(args)))
         sl._metadata['type'] = st_type
         sl._metadata['opening_args'] = args
+        sl._metadata['in'] = 0
+        sl._metadata['out'] = 0
         self._open_streams[stream_nr] = sl
 
     def socketConnect(self, syscall, retcode, args):
@@ -88,16 +100,19 @@ class StatStreams(StatBase):
 
         
     def readStream(self, syscall, retcode, args):
+        """Parse a read action on a stream"""
         stream_nr = int(args[0])
         if stream_nr in self._open_streams:
             stream = self._open_streams[stream_nr]
-            read_str =  self.parseString(syscall, retcode, args[1])
-            if len(stream) > 1 and stream[-2].startswith(StatStreams.IN_MARKER):
-                #merge with last one                                                       
-                stream[-1] += read_str 
-            else:
-                stream.append(StatStreams.IN_MARKER)
-                stream.append(read_str)
+            stream._metadata['in'] += retcode
+            if self.show_text:
+                read_str =  self.parseString(syscall, retcode, args[1])
+                if len(stream) > 1 and stream[-2].startswith(StatStreams.IN_MARKER):
+                    #merge with last one                                                       
+                    stream[-1] += read_str 
+                else:
+                    stream.append(StatStreams.IN_MARKER)
+                    stream.append(read_str)
         else:
             logging.error("Missed openning %s", stream_nr)
             
@@ -106,29 +121,37 @@ class StatStreams(StatBase):
         stream_nr = int(args[0])
         if stream_nr in self._open_streams:
             stream = self._open_streams[stream_nr]
-            write_str =  self.parseString(syscall, retcode, args[1])
-            if len(stream) > 1 and stream[-2].startswith(StatStreams.OUT_MARKER):
-                #merge with last one
-                stream[-1] += write_str 
-            else:
-                #new communication direction, start new block
-                stream.append(StatStreams.OUT_MARKER)
-                stream.append(write_str)  
+            stream._metadata['out'] += retcode
+
+            if self.show_text:
+                write_str =  self.parseString(syscall, retcode, args[1])
+                if len(stream) > 1 and stream[-2].startswith(StatStreams.OUT_MARKER):
+                    #merge with last one
+                    stream[-1] += write_str 
+                else:
+                    #new communication direction, start new block
+                    stream.append(StatStreams.OUT_MARKER)
+                    stream.append(write_str)  
         else:
             logging.error("Missed openning %s", stream_nr)
 
     def parseString(self, syscall, retcode, str_to_parse):
+        """Parse a string from an read/write operation as output by strace"""
         #strip quotes and escape sequences
         str_arg = str_to_parse[1:-1].decode("string_escape")
         if StatStreams.RE_PAT['no_str'].search(str_arg):
             #handle a non printable string
-            str_arg = self.prettyPrintHex(str_arg)
+            if self.show_binary:
+                str_arg = self.prettyPrintHex(str_arg)
+            else:
+                str_args = '<binary data>'
         if retcode > len(str_arg):
             #we don't have everything. Mark missing
             str_arg += '...\n'
         return str_arg
         
     def prettyPrintHex(self, src, length=16):
+        """Pretty print binary data passed from parseString"""
         src = StatStreams.RE_PAT['no_ascii'].sub('.', src)
         offset=0
         result=''
@@ -143,8 +166,10 @@ class StatStreams(StatBase):
     def closeStream(self, syscall, retcode, args):
         stream_nr = int(args[0])
         if stream_nr in self._open_streams:
-            self._closed_streams.append('\n'.join(self._open_streams[stream_nr] + \
-                            ['closed(%s)\n' % stream_nr]))
+            stream = self._open_streams[stream_nr]
+            closing_strs = ['closed(%s) - in:%s - out: %s\n' % 
+                (stream_nr, stream._metadata['in'], stream._metadata['out'])]
+            self._closed_streams.append('\n'.join(stream +  closing_strs))
             del self._open_streams[stream_nr]
         else:
             logging.error("Missed openning %s", stream_nr)
