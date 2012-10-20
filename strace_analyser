@@ -23,6 +23,31 @@ import os
 import io
 from optparse import OptionParser, OptionValueError
 from straceParserLib.StraceParser import StraceParser
+from collections import defaultdict
+
+def parsePluginOption(pluginOptionStr):
+    """ Parse the plugin option str into dict
+    e.g. -o StatFileIO.output=/tmp/IO.out,StatProcessTree.output=/tmp/process.out
+    Return: {"StatFileIO":       {"output": "/tmp/IO.out"},
+             "StatProcessTree:   {"output": "/tmp/process.out"}
+            }
+    if there is no "." in the option key, we will put it in the "default".
+    """
+    returnDict = defaultdict(dict)
+    if not pluginOptionStr:
+        return returnDict
+    for optionStr in pluginOptionStr.split(","):
+        try:
+            key, value = optionStr.split("=")
+            if "." in key:
+                pluginName, keyName = key.split('.')
+            else:
+                pluginName, keyName = "default", key
+            returnDict[pluginName][keyName] = value
+        except ValueError as e:
+            logging.warning("Cannot parse plugin option '%s', ignore." % optionStr)
+    return returnDict
+
 
 def importPlugin(pluginname, name):
     """ Import a plugin 
@@ -36,17 +61,32 @@ def importPlugin(pluginname, name):
 
 def main():
     # parse command line options
-    optionParser = OptionParser(usage="usage: %prog [options] -e [plugins] [<filename>| - ]")
-    optionParser.add_option("-t", action="count", dest="withtime", help="have time in strace (disable autodetect, use -T, -f, -t, -tt or -ttt to match with your strace output)")
+    usage = "\n".join(["Usage: %prog [options] -e [plugin1,plugin2,...] [<filename>| - ]",
+                       "",
+                       "Example: %prog -e StatFileIO strace.out",
+                       "         %prog -e StatFileIO -o output=/tmp/StatFileIO.txt strace.out", 
+                       "         %prog -e StatFileIO,StatFutex -o StatFileIO.output=/tmp/FileIO.txt,StatFutex.output=/tmp/Futex.txt strace.out",
+                       "         strace -o >(%prog -e StatFileIO -) ls > /dev/null"
+                     ])
+
+    optionParser = OptionParser(usage=usage)
+    optionParser.add_option("-t", action="count", dest="withtime", 
+                            help="have time in strace (disable autodetect, use -T, -f, -t, -tt or -ttt to match with your strace output)")
     optionParser.add_option("-f", action="store_true", dest="withpid", help="have pid in strace (disable autodetect)")
     optionParser.add_option("-T", action="store_true", dest="withtimespent", help="have time spent in strace (disable autodetect)")
     optionParser.add_option("-l", "--list-plugins", action="store_true", dest="listplugins", help="list all plugins")
-    optionParser.add_option("-e", "--enable-plugins", action="store", type="string", dest="enableplugins", help="enable these plugins only (e.g. plugin1,plugin2,plugin3)")
+    optionParser.add_option("-e", "--enable-plugins", action="store", type="string", dest="enableplugins", 
+                            help="enable these plugins only (e.g. plugin1,plugin2,plugin3)")
+    optionParser.add_option("-o", "--plugin-options", action="store", type="string", dest="plugin_options", 
+                            help=" ".join(["Specify plugin options by plugin_name.key=value,", 
+                                           "multiple options can be separate by comma (see example above).",
+                                           "plugin_name can be omitted if only 1 plugin is enabled."]))
+    optionParser.add_option("--list-plugin-options", action="store_true", dest="list_plugin_options", help="Show all plugin options")
 
     (options, args) = optionParser.parse_args()
 
     # List plugins
-    if options.listplugins:
+    if options.listplugins or options.list_plugin_options:
         print "=== Stat plugin list ==="
         pluginPath = os.path.join(sys.path[0], "statPlugins")
         plugins = os.listdir(pluginPath)
@@ -62,6 +102,16 @@ def main():
             except:
                 print "Warning: plugin %s does not install, skipping" % plug
             print plugbase, ":", pluginClass.__doc__
+
+            # show plugin options
+            if options.list_plugin_options:
+                optionHelp = pluginClass().optionHelp()
+                if len(optionHelp) == 0:
+                    print " "*8 + "(No option for this plugin)"
+                else:
+                    for name, desc in optionHelp.iteritems():
+                        print " "*8 + "%s.%s: %s" % (pluginClass.__name__, name, desc)
+                print ""
 
         # just listed all plugin and then exit
         exit(0)
@@ -96,27 +146,54 @@ def main():
             logging.warning("Auto detect line format failed. Suggest using -t,-f,-T to specify.")
             exit(1)
 
-    # Load enabled plugins
     enablePluginList = []
     if options.enableplugins:
         enablePluginList = options.enableplugins.split(",")
 
-    statObjList = []
     if len(enablePluginList) == 0:
         print "No plugin is specified. Exit."
         exit(0)
-    else:
-        for plug in enablePluginList:
-            pluginClass = importPlugin("statPlugins." + plug, plug)
-            if not pluginClass:
-                print "Cannot install plugin %s, skipping" % plug
-                continue
 
-            statObj = pluginClass()
-            if statObj.isOperational(straceOptions): # if it is operational under current strace option
-                statObjList.append(statObj)   # new an object from plugin class and put into list
-            else:
-                print "plugin %s is not operational under this strace options, skipping" % plug
+    # parse plugin options
+    pluginOptions = parsePluginOption(options.plugin_options)
+    if "default" in pluginOptions:
+        if len(enablePluginList) != 1:
+            print "Have more than 1 plugin but plugin name doesn't specified on some plugin options."
+            exit(1)
+        pluginOptions[enablePluginList[0]] = pluginOptions["default"]
+    # A sensible check: all the plugin named in plugin options should be enabled, avoid typo
+    for key in pluginOptions:
+        if key is not "default" and key not in enablePluginList:
+            print "Plugin option is specified for plugin %s, but the plugin is not enabled. (typo?)" % key
+            exit(1)
+
+    # Load enabled plugins
+    statObjList = []
+    for plug in enablePluginList:
+        pluginClass = importPlugin("statPlugins." + plug, plug)
+        if not pluginClass:
+            print "Cannot install plugin %s, skipping" % plug
+            continue
+
+        statObj = pluginClass()
+        if not statObj.isOperational(straceOptions): # if it is operational under current strace option
+            print "plugin %s is not operational under this strace options, skipping" % plug
+            continue
+
+        # A sensible check: the plugin option should be in the dict of optionHelp
+        option = pluginOptions.get(plug, {})
+        optionHelpDict = statObj.optionHelp()
+        for optionName in option:
+            if optionName not in optionHelpDict:
+                print "option '%s' doesn't exist for plugin %s" % (optionName, plug)
+                exit(1)
+
+        # setOption for this plugin
+        if not statObj.setOption(option):
+            print "plugin %s add option failure" % plug
+            exit(1)
+
+        statObjList.append(statObj)   # new an object from plugin class and put into list
 
     if len(statObjList) == 0:
         print "No plugin is loaded. Exit."

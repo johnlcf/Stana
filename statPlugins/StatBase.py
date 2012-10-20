@@ -18,6 +18,30 @@
 class StatBase(object):
     """ The base class of stat plugins """
 
+    def optionHelp(self):
+        """ Should return a dict for all options for this plugin.
+            The dict keys are the option names and dict Values are the 
+            description of the options.
+            E.g. {"output":"Write the output to this file instead of stdout"}
+
+            It will be used for a help text in the command line. And it will
+            be used to check if user input a correct option: If an
+            option is specified for this plugin by user but it is not specified
+            here, the command line will show error.
+        """
+        return {}
+
+    def setOption(self, pluginOptionDict):
+        """ The pluginOptionDict contains the key value pair of options for
+            specified by user in the command line for this plugin.
+            E.g. {"output":"/tmp/output.txt"}
+
+            If no option specified, pluginOptionDict will be an empty dict ({}).
+            Return False if there is some problem in the options so that this
+            plugin would not be used.
+        """
+        return True
+
     def isOperational(self, straceOptions):
         """ Should return true if this plugin works in the current strace 
             options.

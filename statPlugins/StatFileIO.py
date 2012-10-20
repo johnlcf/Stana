@@ -13,6 +13,8 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
 
+import sys
+
 from StatBase import StatBase
 
 class StatFileIO(StatBase):
@@ -21,7 +23,15 @@ class StatFileIO(StatBase):
     def __init__(self):
         self._fileStatList = {}
         self._fidStatList = {}
+        self._pluginOptionDict = {}
         return
+
+    def optionHelp(self):
+        return {"output":"Write the output to this file instead of stdout"}
+
+    def setOption(self, pluginOptionDict):
+        self._pluginOptionDict = pluginOptionDict
+        return True
 
     def getSyscallHooks(self):
         return_dict = {}
@@ -79,7 +89,9 @@ class StatFileIO(StatBase):
             return
 
     def printOutput(self):
-        print "====== File IO summary (csv) ======"
+        filename = self._pluginOptionDict.get("output", "")
+        f = open(filename, "w") if filename else sys.stdout
+        f.write("====== File IO summary (csv) ======\n")
 
         for fid in self._fidStatList:
             #print self._fidStatList[fid]
@@ -91,7 +103,7 @@ class StatFileIO(StatBase):
                 for i in [1, 2, 3, 4]:
                     self._fileStatList[filename][i] += self._fidStatList[fid][i]
 
-        print "filename, open/close count, read count, read bytes, write count, write bytes"
+        f.write("filename, open/close count, read count, read bytes, write count, write bytes\n")
         for file in self._fileStatList:
-            print "%s, %d, %d, %d, %d, %d" % tuple([file] + self._fileStatList[file])
+            f.write("%s, %d, %d, %d, %d, %d\n" % tuple([file] + self._fileStatList[file]))
 

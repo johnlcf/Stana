@@ -13,6 +13,7 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
 
+import sys
 from datetime import timedelta, datetime
 from collections import defaultdict
 
@@ -28,6 +29,17 @@ class StatFutex(StatBase):
         self._unfinishedResult = {}
         self._futexHolderPid = {}
         self._futexWaiterPids = defaultdict(list)
+        self._pluginOptionDict = {}
+        self._outputFile = sys.stdout
+
+    def optionHelp(self):
+        return {"output":"Write the output to this file instead of stdout"}
+
+    def setOption(self, pluginOptionDict):
+        self._pluginOptionDict = pluginOptionDict
+        filename = self._pluginOptionDict.get("output", "")
+        self._outputFile = open(filename, "w") if filename else sys.stdout
+        return True
 
     def isOperational(self, straceOptions):
         self._straceOptions = straceOptions
@@ -67,10 +79,10 @@ class StatFutex(StatBase):
                 # add myself in waiter list
                 self._futexWaiterPids[futexAddress].append(pid)
 
-                print "{0} pid:{1} wait        futex:{2}, current holder:{3}, waiting list:{4}".format(
+                self._outputFile.write("{0} pid:{1} wait        futex:{2}, current holder:{3}, waiting list:{4}\n".format(
                        timeStr, pid, futexAddress, 
                        self._futexHolderPid[futexAddress] if futexAddress in self._futexHolderPid else "Unknown", 
-                       self._futexWaiterPids[futexAddress])
+                       self._futexWaiterPids[futexAddress]))
 
             else: # completed or resumed = being wake up or timeout
                 # remove myself from futexWaiterPids
@@ -81,25 +93,25 @@ class StatFutex(StatBase):
                 returnValue = result["return"]
                 if int(returnValue) == 0: # being wake up
                     self._futexHolderPid[futexAddress] = pid    # I am the holder now
-                    print "{0} pid:{1} hold        futex:{2}, waiting list:{3}".format(
+                    self._outputFile.write("{0} pid:{1} hold        futex:{2}, waiting list:{3}\n".format(
                            timeStr, pid, futexAddress, 
-                           self._futexWaiterPids[futexAddress])
+                           self._futexWaiterPids[futexAddress]))
                 else:                # timeout 
-                    print "{0} pid:{1} timeout     futex:{2}".format(timeStr, pid, futexAddress)
+                    self._outputFile.write("{0} pid:{1} timeout     futex:{2}\n".format(timeStr, pid, futexAddress))
                     #TODO: many different cases in man page
 
         if "FUTEX_WAKE" in futexOp:
             self._futexHolderPid[futexAddress] = None
-            print "{0} pid:{1} release     futex:{2}, waiting list:{3}".format(
+            self._outputFile.write("{0} pid:{1} release     futex:{2}, waiting list:{3}\n".format(
                    timeStr, pid, futexAddress, 
-                   self._futexWaiterPids[futexAddress])
+                   self._futexWaiterPids[futexAddress]))
 
 
     def printOutput(self):
         futexAddressSet = set(self._futexHolderPid.keys() + self._futexWaiterPids.keys())
 
-        print "Futex Address,Holder,Waiters"
+        self._outputFile.write("Futex Address,Holder,Waiters\n")
         for addr in futexAddressSet:
-            print "{0},{1},{2}".format(addr, 
+            self._outputFile.write("{0},{1},{2}\n".format(addr, 
                    self._futexHolderPid[addr] if addr in self._futexHolderPid else "Unknown",
-                   self._futexWaiterPids[addr])
+                   self._futexWaiterPids[addr]))
