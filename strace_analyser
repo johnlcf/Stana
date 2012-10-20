@@ -20,6 +20,7 @@ import re
 import traceback
 import logging
 import os
+import io
 from optparse import OptionParser, OptionValueError
 from straceParserLib.StraceParser import StraceParser
 
@@ -35,7 +36,7 @@ def importPlugin(pluginname, name):
 
 def main():
     # parse command line options
-    optionParser = OptionParser(usage="usage: %prog [options] [plugins] [<filename>| - ]")
+    optionParser = OptionParser(usage="usage: %prog [options] -e [plugins] [<filename>| - ]")
     optionParser.add_option("-t", action="count", dest="withtime", help="have time in strace (disable autodetect, use -T, -f, -t, -tt or -ttt to match with your strace output)")
     optionParser.add_option("-f", action="store_true", dest="withpid", help="have pid in strace (disable autodetect)")
     optionParser.add_option("-T", action="store_true", dest="withtimespent", help="have time spent in strace (disable autodetect)")
@@ -69,8 +70,16 @@ def main():
     if len(args) < 1:
         print "Error: Filename is missing, exit."
         optionParser.print_help()
-        return 1
+        exit(1)
     straceFile = args[0]
+    if straceFile == '-':
+        reader = io.open(sys.stdin.fileno())
+    else:
+        try:
+            reader = io.open(straceFile)
+        except IOError as e:
+            print e
+            exit(1)
 
     # init StraceParser
     straceParser = StraceParser()
@@ -81,12 +90,8 @@ def main():
         # convert it back to t, tt, or ttt
         straceOptions["haveTime"] = "t" * options.withtime  
         straceOptions["haveTimeSpent"] = options.withtimespent
-    elif straceFile == '-':
-        #we can't infer anything if working on-line
-        straceOptions = dict(havePid=False, haveTime=False, haveTimeSpent=False)
-        print >> sys.stderr, "WARN: Assuming no pid or time info in strace output."
     else:
-        straceOptions = straceParser.autoDetectFormat(straceFile)
+        straceOptions = straceParser.autoDetectFormat(reader)
         if not straceOptions:
             logging.warning("Auto detect line format failed. Suggest using -t,-f,-T to specify.")
             exit(1)
@@ -129,11 +134,13 @@ def main():
                 straceParser.registerRawSyscallHook(syscall, func)
     
     ## Go ahead and parse the file
-    straceParser.startParse(straceFile, straceOptions)
+    straceParser.startParse(reader, straceOptions)
 
     ## print the result of the stat plugins
     for obj in statObjList:
         obj.printOutput()
+
+    reader.close()
 
 if __name__ == "__main__":
     main()

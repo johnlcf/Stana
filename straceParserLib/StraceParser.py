@@ -65,10 +65,10 @@ class StraceParser:
         table[name].append(func)
         
 
-    def startParse(self, filename, straceOptions):
-        self._parse(filename, straceOptions)
+    def startParse(self, reader, straceOptions):
+        self._parse(reader, straceOptions)
 
-    def autoDetectFormat(self, filename):
+    def autoDetectFormat(self, reader):
         """ autoDetectFormat - Detect the strace output line format, return a
             dict with following:
 
@@ -76,26 +76,23 @@ class StraceParser:
             straceOptions["haveTime"] = None/"t"/"tt"/"ttt"
             straceOptions["haveTimeSpent"] True/False
                 
+            It use peek() on the reader so it will not abvance the position of
+            the stream.
         """
-        #don't check if it comes from streams
-        if filename == '-':
-            return 
-        else:
-            f = open(filename)
+        buf = reader.buffer.peek(4096);
 
         failCount = 0
-        for line in f:
+        for line in buf.split('\n'):
             if failCount == 3:
-                f.close()
                 return None
             if "unfinish" in line or "resume" in line:
                 continue
             straceOptions = self._detectLineFormat(line)
             if straceOptions:
-                f.close()
                 return straceOptions
             else:
                 failCount += 1
+        return None
 
     def _detectTimeFormat(self, timeStr):
         if ":" not in timeStr and "." in timeStr:
@@ -156,19 +153,15 @@ class StraceParser:
 
 
 
-    def _parse(self, filename, straceOptions):
+    def _parse(self, reader, straceOptions):
         syscallListByPid = {}
 
         unfinishedSyscallStack = {}
-        if filename == '-':
-            f = sys.stdin
-        else:
-            f = open(filename, "r")
-        if not f:
-            logging.error("Cannot open file: " + filename)
+        if not reader:
+            logging.error("Cannot read file")
             return
 
-        for line in f:
+        for line in reader:
 
             if "restart_syscall" in line:      # TODO: ignore this first
                 continue
