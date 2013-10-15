@@ -60,7 +60,10 @@ class StatFutex(StatBase):
         #print result
         pid = result["pid"]
         syscallType = result["type"]
-        timeStr = result["startTime"].time()
+        if "startTime" in result:
+            timeStr = result["startTime"].time()
+        else:
+            timeStr = ""
 
         if syscallType == "resumed":
             # if this is a resume syscall, combine it with last unfinished syscall of this pid
