@@ -34,7 +34,7 @@ class StatStreams(StatBase):
         ip_address=re.compile('.*[^0-9]((?:[0-9]{1,3}\.){3}[0-9]{1,3})[^0-9].*'),
         #set of printable unicode characters 
         #(no control charaters and \t \n \r (:= 9,10,13)
-        no_str=re.compile('[%s]' % re.escape(''.join(map(unichr, range(0,8) + [11, 12] + range (14,32) + range(127,160))))),
+        no_str=re.compile('[%s]' % re.escape(''.join(map(unichr, range(0,8) + [11, 12] + range (14,32) + range(127,256))))),
         no_ascii=re.compile('[^%s]' % re.escape(''.join(map(chr, range(33,126))))))
 
     #markers for displaying the output
@@ -147,7 +147,7 @@ class StatStreams(StatBase):
             if self.show_binary:
                 str_arg = self.prettyPrintHex(str_arg)
             else:
-                str_args = '<binary data>'
+                str_arg = '<binary data>'
         if retcode > len(str_arg):
             #we don't have everything. Mark missing
             str_arg += '...\n'
@@ -170,19 +170,19 @@ class StatStreams(StatBase):
         stream_nr = int(args[0])
         if stream_nr in self._open_streams:
             stream = self._open_streams[stream_nr]
-            closing_strs = ['closed(%s) - in:%s - out: %s\n' % 
+            closing_strs = ['closed(%d) - in:%d - out: %d\n' % 
                 (stream_nr, stream._metadata['in'], stream._metadata['out'])]
 
             if self.show_online:
                 #just show the report and continue
-                print '\n'.join(stream +  closing_strs)
+                print '\n'.join(stream + closing_strs)
             else:
                 #store the report for later
-                self._closed_streams.append('\n'.join(stream +  closing_strs))
+                self._closed_streams.append('\n'.join(stream + closing_strs))
 
             del self._open_streams[stream_nr]
         else:
-            logging.error("Missed openning %s", stream_nr)
+            logging.error("Missed openning %d", stream_nr)
 
     def statStreams(self, result):
         logging.debug(result)
