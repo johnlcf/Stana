@@ -94,8 +94,10 @@ class StatStreams(StatBase):
         stream_nr = int(args[0])
         if stream_nr in self._open_streams:
             stream = self._open_streams[stream_nr]
-            if args[1][0].startswith('sa_family=AF_INET'):
+            if args[1][0] == 'sa_family=AF_INET':
                 stream.append('Connected to %s' % StatStreams.RE_PAT['ip_address'].match(args[1][2]).group(1))
+            elif args[1][0] == 'sa_family=AF_INET6':
+                stream.append('Connected to %s' % args[1][3])
         else:
             logging.error("Missed openning %s", stream_nr)
 
