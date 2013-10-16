@@ -155,13 +155,13 @@ class StatStreams(StatBase):
         
     def prettyPrintHex(self, src, length=16):
         """Pretty print binary data passed from parseString"""
-        src = StatStreams.RE_PAT['no_ascii'].sub('.', src)
         offset=0
         result=''
         while src:
            s,src = src[:length],src[length:]
            hexa = ' '.join(["%02X"%ord(x) for x in s])
-           result += "%04X   %-*s   %s\n" % (offset, length * 3, hexa, s)
+           s_ascii = StatStreams.RE_PAT['no_ascii'].sub('.', s)
+           result += "%04X   %-*s   %s\n" % (offset, length * 3, hexa, s_ascii)
            offset += length
         return result
 
