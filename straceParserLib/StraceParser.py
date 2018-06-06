@@ -166,6 +166,9 @@ class StraceParser:
             if "restart_syscall" in line:      # TODO: ignore this first
                 continue
 
+            if "+++ exited with" in line:
+                continue
+
             unfinishedSyscall = False
             reconstructSyscall = False
             if "<unfinished ...>" in line:     # store the unfinished line for reconstruct
