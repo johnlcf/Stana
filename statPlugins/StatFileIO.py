@@ -35,7 +35,7 @@ class StatFileIO(StatBase):
 
     def getSyscallHooks(self):
         return_dict = {}
-        for syscall in ["read", "write", "open", "close"]:
+        for syscall in ["read", "write", "open", "openat", "close"]:
             return_dict[syscall] = self.statFileIO
         return return_dict
 
@@ -43,11 +43,11 @@ class StatFileIO(StatBase):
         return True
 
     def statFileIO(self, result):
-        if result["syscall"] in ["read", "write", "open", "close"]:
+        if result["syscall"] in ["read", "write", "open", "openat", "close"]:
             if result["return"] == -1:  # ignore failed syscalls
                 return
             
-            if result["syscall"] == "open":
+            if result["syscall"] in ["open", "openat"]:
                 fid = result["return"]
             else:
                 fid = result["args"][0]
@@ -76,6 +76,8 @@ class StatFileIO(StatBase):
                 if result["syscall"] == "open":
                     # self._fidStatList[fid] = [filename, read count, read acc bytes, write count, write acc bytes]
                     self._fidStatList[fid] = [result["args"][0], 0, 0, 0, 0]
+                elif result["syscall"] == "openat":
+                    self._fidStatList[fid] = [result["args"][1], 0, 0, 0, 0]
                 else:
                     self._fidStatList[fid] = ["unknown:"+fid, 0, 0, 0, 0]
 
