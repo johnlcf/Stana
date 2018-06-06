@@ -27,7 +27,7 @@ class streamList(list):
 class StatStreams(StatBase):
     """ Stat and follow streams in strace"""
     #Syscalls this object will be registered with
-    SYSCALLS = "open socket connect read write close".split()
+    SYSCALLS = "open openat socket connect read write close".split()
 
     #some regexp for extracting information out of the strace log lines
     RE_PAT = dict(
@@ -75,14 +75,17 @@ class StatStreams(StatBase):
             return
 
         stream_nr = retcode
-        file_name = args[0]
+        if syscall == "openat":
+            file_name = args[1]
+        else:
+            file_name = args[0]
 
         if stream_nr in self._open_streams:
             #the filehandle should have been closed! we missed it
             logging.warn("Missed closing of stream %s", stream_nr)
             self.close_stream(stream_nr)
 
-        st_type = dict(open="file",socket="socket")[syscall]
+        st_type = dict(open="file",openat="file",socket="socket")[syscall]
         sl = streamList("%s(%s) %s" % (st_type , stream_nr, ', '.join(args)))
         sl._metadata['type'] = st_type
         sl._metadata['opening_args'] = args
@@ -190,11 +193,12 @@ class StatStreams(StatBase):
 
         if syscall in StatStreams.SYSCALLS:
             dict(open=self.openStream,
-                socket=self.openStream,
-                connect=self.socketConnect,
-                read=self.readStream,
-                write=self.writeStream,
-                close=self.closeStream)[syscall](syscall, retcode, args)
+                 openat=self.openStream,
+                 socket=self.openStream,
+                 connect=self.socketConnect,
+                 read=self.readStream,
+                 write=self.writeStream,
+                 close=self.closeStream)[syscall](syscall, retcode, args)
                 
             
     def printOutput(self):
