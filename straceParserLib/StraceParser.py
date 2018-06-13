@@ -73,7 +73,7 @@ class StraceParser:
             dict with following:
 
             straceOptions["havePid"] = True/False
-            straceOptions["haveTime"] = None/"t"/"tt"/"ttt"
+            straceOptions["haveTime"] = ""/"t"/"tt"/"ttt"
             straceOptions["haveTimeSpent"] True/False
                 
             It use peek() on the reader so it will not abvance the position of
@@ -107,7 +107,7 @@ class StraceParser:
 
     def _detectLineFormat(self, line):
         havePid = False
-        haveTime = None
+        haveTime = ""
         haveTimeSpent = False
 
         remainLine = line
@@ -135,7 +135,7 @@ class StraceParser:
                     haveTime = self._detectTimeFormat(preList[0])
                 else:
                     havePid = True
-                    haveTime = None
+                    haveTime = ""
 
         if post != '':
             if re.search(r"(<[0-9.]+>)", line):
