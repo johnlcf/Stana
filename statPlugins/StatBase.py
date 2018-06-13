@@ -47,7 +47,7 @@ class StatBase(object):
             options.
             The straceOptions should be a dict contains at least:
             straceOptions["havePid"] = 1/0
-            straceOptions["haveTime"] = 1/0
+            straceOptions["haveTime"] = "", "t", "tt", or "ttt"
             straceOptions["haveTimeSpent"] = 1/0
 
             If isOperational return false, the register function will not be

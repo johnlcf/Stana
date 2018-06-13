@@ -138,7 +138,11 @@ def main():
         straceOptions["havePid"] = options.withpid
         # options.withtime contain the number of -t (e.g. -t = 1, -tt = 2. -ttt = 3)
         # convert it back to t, tt, or ttt
-        straceOptions["haveTime"] = "t" * options.withtime  
+        if options.withtime:
+            straceOptions["haveTime"] = "t" * options.withtime
+        else:
+            straceOptions["haveTime"] = ""
+
         straceOptions["haveTimeSpent"] = options.withtimespent
     else:
         straceOptions = straceParser.autoDetectFormat(reader)

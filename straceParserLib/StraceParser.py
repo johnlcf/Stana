@@ -273,7 +273,7 @@ class StraceParser:
             if straceOptions["havePid"]:
                 result["pid"], remainLine = remainLine.split(None, 1)
 
-            if straceOptions["haveTime"]:
+            if straceOptions["haveTime"] != "":
                 timeStr, remainLine = remainLine.split(None, 1)
                 result["startTime"] = self._timeStrToTime(timeStr, straceOptions["haveTime"])
 
