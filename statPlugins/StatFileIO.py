@@ -44,7 +44,7 @@ class StatFileIO(StatBase):
 
     def statFileIO(self, result):
         if result["syscall"] in ["read", "write", "open", "openat", "close"]:
-            if result["return"] == -1:  # ignore failed syscalls
+            if result["return"] == "-1":  # ignore failed syscalls
                 return
             
             if result["syscall"] in ["open", "openat"]:

@@ -257,7 +257,7 @@ class StraceParser:
 #   startTime : start time of the call (if haveTime enabled)
 #   syscall :   system call function 
 #   args :      a list of arguments ([] if no options)
-#   return :    return value (+/- int or hex number string or '?' (e.g. exit syscall)), not exist if it is an unfinished syscall
+#   return :    return value (+/- int string or hex number string or '?' (e.g. exit syscall)), not exist if it is an unfinished syscall
 #   timeSpent : time spent in syscall (if haveTimeSpent enable. But even so, it may not exist in some case (e.g. exit syscall) and None will be stored in this field)
 #   type :      Type of syscall ("completed", "unfinished", "resumed")
 #
