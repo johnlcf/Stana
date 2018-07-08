@@ -24,6 +24,7 @@ class StatFileIO(StatBase):
         self._fileStatList = {}
         self._fidStatList = {}
         self._pluginOptionDict = {}
+        self._straceOptions = {}
         return
 
     def optionHelp(self):
@@ -40,6 +41,7 @@ class StatFileIO(StatBase):
         return return_dict
 
     def isOperational(self, straceOptions):
+        self._straceOptions = straceOptions
         return True
 
     def statFileIO(self, result):
@@ -52,42 +54,54 @@ class StatFileIO(StatBase):
             else:
                 fid = result["args"][0]
 
+            if self._straceOptions["havePid"]:
+                pid = int(result["pid"])
+            else:
+                pid = 0
+            if pid not in self._fidStatList:
+                self._fidStatList[pid] = {}
+            if pid not in self._fileStatList:
+                self._fileStatList[pid] = {}
+
             # file close
             if result["syscall"] == "close":
-                if fid in self._fidStatList:
+                if fid in self._fidStatList[pid]:
                     #print self._fidStatList[fid]
-                    filename = self._fidStatList[fid][0]
-                    if filename not in self._fileStatList:
-                        self._fileStatList[filename] = [1, 
-                                                        self._fidStatList[fid][1], 
-                                                        self._fidStatList[fid][2], 
-                                                        self._fidStatList[fid][3], 
-                                                        self._fidStatList[fid][4]]
+                    filename = self._fidStatList[pid][fid][0]
+                    if filename not in self._fileStatList[pid]:
+                        self._fileStatList[pid][filename] = [1, 
+                                                             self._fidStatList[pid][fid][1], 
+                                                             self._fidStatList[pid][fid][2], 
+                                                             self._fidStatList[pid][fid][3], 
+                                                             self._fidStatList[pid][fid][4]]
                     else:
-                        self._fileStatList[filename][0] += 1
+                        self._fileStatList[pid][filename][0] += 1
                         for i in [1, 2, 3, 4]:
-                            self._fileStatList[filename][i] += self._fidStatList[fid][i]
+                            self._fileStatList[pid][filename][i] += self._fidStatList[pid][fid][i]
 
-                    del self._fidStatList[fid]
-                    return
+                    del self._fidStatList[pid][fid]
+                # else if fid not in self._fidStatList[pid] and this is a close syscall, just ignore and return
+                return
 
             # if read/write/open
-            if fid not in self._fidStatList:
+            if fid not in self._fidStatList[pid]:
                 if result["syscall"] == "open":
-                    # self._fidStatList[fid] = [filename, read count, read acc bytes, write count, write acc bytes]
-                    self._fidStatList[fid] = [result["args"][0], 0, 0, 0, 0]
+                    # self._fidStatList[pid][fid] = [filename, read count, read acc bytes, write count, write acc bytes]
+                    self._fidStatList[pid][fid] = [result["args"][0], 0, 0, 0, 0]
                 elif result["syscall"] == "openat":
-                    self._fidStatList[fid] = [result["args"][1], 0, 0, 0, 0]
+                    self._fidStatList[pid][fid] = [result["args"][1], 0, 0, 0, 0]
                 else:
-                    self._fidStatList[fid] = ["unknown:"+fid, 0, 0, 0, 0]
+                    self._fidStatList[pid][fid] = ["unknown:"+fid, 0, 0, 0, 0]
+            # ISSUE #8: if fid in self._fidStatList[pid] but the syscall is open/openat, that mean
+            # we missed a close syscall, we should update _fileStatList before we move on
 
             # stat read/write
             if result["syscall"] == "read":
-                self._fidStatList[fid][1] += 1
-                self._fidStatList[fid][2] += int(result["return"])
+                self._fidStatList[pid][fid][1] += 1
+                self._fidStatList[pid][fid][2] += int(result["return"])
             if result["syscall"] == "write":
-                self._fidStatList[fid][3] += 1
-                self._fidStatList[fid][4] += int(result["return"])
+                self._fidStatList[pid][fid][3] += 1
+                self._fidStatList[pid][fid][4] += int(result["return"])
             return
 
     def printOutput(self):
@@ -95,17 +109,24 @@ class StatFileIO(StatBase):
         f = open(filename, "w") if filename else sys.stdout
         f.write("====== File IO summary (csv) ======\n")
 
-        for fid in self._fidStatList:
-            #print self._fidStatList[fid]
-            filename = self._fidStatList[fid][0]
-            if filename not in self._fidStatList:
-                self._fileStatList[filename] = [1, self._fidStatList[fid][1], self._fidStatList[fid][2], self._fidStatList[fid][3], self._fidStatList[fid][4]]
-            else:
-                self._fileStatList[filename][0] += 1
-                for i in [1, 2, 3, 4]:
-                    self._fileStatList[filename][i] += self._fidStatList[fid][i]
+        for pid in self._fidStatList:
+            for fid in self._fidStatList[pid]:
+                #print self._fidStatList[pid][fid]
+                filename = self._fidStatList[pid][fid][0]
+                if filename not in self._fileStatList[pid]:
+                    self._fileStatList[pid][filename] = [1] + self._fidStatList[pid][fid][1:5]
+                else:
+                    self._fileStatList[pid][filename][0] += 1
+                    for i in [1, 2, 3, 4]:
+                        self._fileStatList[pid][filename][i] += self._fidStatList[pid][fid][i]
 
+        if self._straceOptions["havePid"]:
+            f.write("pid, ")
         f.write("filename, open/close count, read count, read bytes, write count, write bytes\n")
-        for file in self._fileStatList:
-            f.write("%s, %d, %d, %d, %d, %d\n" % tuple([file] + self._fileStatList[file]))
+
+        for pid in self._fileStatList:
+            for filename in self._fileStatList[pid]:
+                if self._straceOptions["havePid"]:
+                    f.write("%d, " % pid)
+                f.write("%s, %d, %d, %d, %d, %d\n" % tuple([filename] + self._fileStatList[pid][filename]))
 
